@@ -33,8 +33,18 @@ export function enableLowPowerRenderer(game: Phaser.Game): void {
   }
   let attempts = 0;
   const install = (): void => {
-    if (!game.isBooted || !globalScene?.ui || !game.canvas || !game.renderer) {
-      if (++attempts < 240) {
+    // Do not resize an in-progress loading scene: asset pipelines and
+    // textures are still being initialized. The physical-buffer adapter
+    // was accepted only AFTER the browser reached TitlePhase.
+    const phase = globalScene?.phaseManager?.getCurrentPhase();
+    if (
+      !game.isBooted
+      || !globalScene?.ui
+      || phase?.constructor.name !== "TitlePhase"
+      || !game.canvas
+      || !game.renderer
+    ) {
+      if (++attempts < 2400) {
         window.setTimeout(install, 125);
       }
       return;

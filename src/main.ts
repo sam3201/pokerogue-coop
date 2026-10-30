@@ -11,6 +11,7 @@ import BBCodeTextPlugin from "phaser3-rex-plugins/plugins/bbcodetext-plugin";
 import InputTextPlugin from "phaser3-rex-plugins/plugins/inputtext-plugin";
 import TransitionImagePackPlugin from "phaser3-rex-plugins/templates/transitionimagepack/transitionimagepack-plugin";
 import UIPlugin from "phaser3-rex-plugins/templates/ui/ui-plugin";
+import { enableLowPowerRenderer } from "./low-power-renderer";
 
 if (isBeta || isDev) {
   document.title += " (Beta)";
@@ -88,6 +89,9 @@ async function startGame(): Promise<void> {
     version,
   });
   game.sound.pauseOnBlur = isMobile();
+  // ARM/Linux devices use 320x180 presentation; ?graphics=full restores
+  // the standard renderer, while ?graphics=low opts in on other devices.
+  enableLowPowerRenderer(game);
 }
 
 try {

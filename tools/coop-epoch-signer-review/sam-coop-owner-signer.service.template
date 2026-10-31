@@ -1,0 +1,55 @@
+# STAGING ONLY. Do not install without reviewed user/group setup,
+# independently pinned key, run registration and a working capture UID.
+# Requires:
+#   signer user: sam-coop-signer
+#   Unix IPC group: sam-coop-ipc
+#   capture owner: sam-coop-capture, supplementary group sam-coop-ipc
+#   key file: signer-owned 0600 /var/lib/sam-coop-signer/owner-ed25519.pk8
+#   configuration: /etc/sam-agi/owner-signer.env, protected by root
+# The service runs one signing request for one run, then exits.
+[Unit]
+Description=SAM co-op private per-run Ed25519 signer
+ConditionPathExists=/etc/sam-agi/owner-signer.env
+After=local-fs.target
+
+[Service]
+Type=exec
+User=sam-coop-signer
+Group=sam-coop-ipc
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONNOUSERSITE=1
+EnvironmentFile=/etc/sam-agi/owner-signer.env
+# Executables MUST be installed root-owned into this read-only path.
+# NEVER run elevated signer from the sam3201-writable game repository.
+ExecStartPre=/usr/bin/python3 -I /usr/local/libexec/sam-agi/owner-signer/verify_signer_install_v1.py
+ExecStart=/usr/bin/python3 -I /usr/local/libexec/sam-agi/owner-signer/run_private_owner_signer_service_v1.py
+UMask=0117
+RuntimeDirectory=sam-coop-signer
+RuntimeDirectoryMode=0750
+StateDirectory=sam-coop-signer
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/usr/local/libexec/sam-agi/owner-signer
+InaccessiblePaths=/home/sam3201
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictSUIDSGID=true
+LimitNOFILE=64
+MemoryMax=128M
+CPUQuota=25%
+Restart=no
+TimeoutStartSec=10
+TimeoutStopSec=5
+
+# NO [Install] section: must not be enabled until reviewed and provisioned.

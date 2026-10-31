@@ -35,6 +35,9 @@ jobs:
             test_verify_signer_install_v1.py \
             test_staged_signer_isolated_entrypoint_v1.py \
             test_preflight_owner_isolation_v1.py
+      - name: Prove distinct Unix UID signer isolation (disposable CI only)
+        working-directory: tools/coop-epoch-signer-review
+        run: sudo -n "$(command -v python)" -I test_distinct_uid_signer_integration_v1.py
       - name: Verify reviewed code digests
         working-directory: tools/coop-epoch-signer-review
         run: |

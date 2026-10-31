@@ -15,9 +15,16 @@ KEY = STATE_DIR / "owner-ed25519.pk8"
 RUNTIME_DIR = Path("/run/sam-coop-signer")
 CONFIG = Path("/etc/sam-agi/owner-signer.env")
 UNIT = Path("/etc/systemd/system/sam-coop-owner-signer.service")
+RELAY_RUNTIME_DIR = Path("/run/sam-coop-relay")
+RELAY_EXTERNAL_DIR = RELAY_RUNTIME_DIR / "capture"
+RELAY_INTERNAL_DIR = RELAY_RUNTIME_DIR / "private"
 
 CHECKS = (
     "distinct_os_identities",
+    "distinct_relay_os_identity",
+    "relay_runtime_root_directory",
+    "relay_capture_gateway_directory",
+    "relay_private_backend_directory",
     "signer_private_state_directory",
     "signer_private_key_metadata",
     "root_owned_code_path",
@@ -51,6 +58,31 @@ def identity_gate():
     return separated and capture_member and signer_member, signer.pw_uid, group.gr_gid, capture.pw_uid
 
 
+def relay_identity_gate():
+    try:
+        signer = pwd.getpwnam("sam-coop-signer")
+        capture = pwd.getpwnam("sam-coop-capture")
+        relay = pwd.getpwnam("sam-coop-relay")
+        general = pwd.getpwnam("sam3201")
+        group = grp.getgrnam("sam-coop-ipc")
+    except KeyError:
+        return False, None
+    distinct = len({0, signer.pw_uid, capture.pw_uid,
+                    relay.pw_uid, general.pw_uid}) == 5
+    relay_member = (relay.pw_gid == group.gr_gid or
+                    relay.pw_name in group.gr_mem)
+    return distinct and relay_member, relay.pw_uid
+
+
+def group_directory(path, uid, gid, mode):
+    if not metadata(path, uid, mode, directory=True):
+        return False
+    try:
+        return os.lstat(path).st_gid == gid
+    except OSError:
+        return False
+
+
 def code_path_root_owned():
     # This is only metadata preflight. Full SHA-256 verification remains the
     # separate installed verify_signer_install_v1.py requirement.
@@ -76,12 +108,21 @@ def code_path_root_owned():
 
 def facts():
     identities, signer_uid, group_gid, _capture_uid = identity_gate()
+    relay_identity, relay_uid = relay_identity_gate()
     signer_uid = -1 if signer_uid is None else signer_uid
+    relay_uid = -1 if relay_uid is None else relay_uid
     runtime_ok = metadata(RUNTIME_DIR, signer_uid, 0o750, directory=True)
     if runtime_ok:
         runtime_ok = os.lstat(RUNTIME_DIR).st_gid == group_gid
     return {
         "distinct_os_identities": identities,
+        "distinct_relay_os_identity": relay_identity,
+        "relay_runtime_root_directory": group_directory(
+            RELAY_RUNTIME_DIR, relay_uid, group_gid, 0o750),
+        "relay_capture_gateway_directory": group_directory(
+            RELAY_EXTERNAL_DIR, relay_uid, group_gid, 0o750),
+        "relay_private_backend_directory": metadata(
+            RELAY_INTERNAL_DIR, relay_uid, 0o700, directory=True),
         "signer_private_state_directory": metadata(
             STATE_DIR, signer_uid, 0o700, directory=True),
         "signer_private_key_metadata": metadata(KEY, signer_uid, 0o600),

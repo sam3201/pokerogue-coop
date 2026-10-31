@@ -59,5 +59,38 @@ class OwnerIsolationPreflightTests(unittest.TestCase):
         self.assertFalse(report["production_scene_eligible"])
 
 
+    def test_08_relay_directory_requires_correct_uid_gid_and_mode(self):
+        from preflight_owner_isolation_v1 import group_directory
+        with tempfile.TemporaryDirectory(prefix="sam-gateway-group-") as d:
+            path = Path(d) / "relay"
+            path.mkdir(mode=0o700)
+            path.chmod(0o750)
+            self.assertTrue(group_directory(
+                path, os.getuid(), os.getgid(), 0o750))
+            self.assertFalse(group_directory(
+                path, os.getuid(), os.getgid()+1, 0o750))
+            path.chmod(0o770)
+            self.assertFalse(group_directory(
+                path, os.getuid(), os.getgid(), 0o750))
+
+    def test_09_dedicated_relay_must_not_reuse_capture_uid(self):
+        from types import SimpleNamespace as P
+        from unittest.mock import patch
+        import preflight_owner_isolation_v1 as preflight
+        users = {
+            "sam-coop-signer": P(pw_uid=301, pw_gid=41, pw_name="sam-coop-signer"),
+            "sam-coop-capture": P(pw_uid=302, pw_gid=42, pw_name="sam-coop-capture"),
+            "sam-coop-relay": P(pw_uid=303, pw_gid=42, pw_name="sam-coop-relay"),
+            "sam3201": P(pw_uid=1000, pw_gid=1000, pw_name="sam3201"),
+        }
+        group = P(gr_gid=42, gr_mem=[])
+        with (patch.object(preflight.pwd, "getpwnam", side_effect=users.__getitem__),
+              patch.object(preflight.grp, "getgrnam", return_value=group)):
+            self.assertTrue(preflight.relay_identity_gate()[0])
+            users["sam-coop-relay"] = P(
+                pw_uid=302, pw_gid=42, pw_name="sam-coop-relay")
+            self.assertFalse(preflight.relay_identity_gate()[0])
+
+
 if __name__ == "__main__":
     unittest.main()

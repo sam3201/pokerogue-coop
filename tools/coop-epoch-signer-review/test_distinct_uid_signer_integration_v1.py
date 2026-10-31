@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import shutil
 import socket
 import subprocess
 import sys
@@ -20,7 +21,6 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 ROOT = Path(__file__).resolve().parent
-RUNNER = ROOT / "run_private_owner_signer_service_v1.py"
 RUN_ID = "7c768a8e-2f2e-4b14-8900-991c1e9eaaaa"
 SIGNER_UID, CAPTURE_UID, OUTSIDER_UID = 62520, 62521, 62522
 SIGNER_GID, CAPTURE_GID, IPC_GID = 62520, 62521, 62523
@@ -83,6 +83,27 @@ class DistinctUnixPrincipals(unittest.TestCase):
             # TemporaryDirectory defaults to 0700 root. Allow only traversal
             # of the parent; key material remains in a private signer dir.
             os.chmod(base, 0o755)
+            # The CI checkout is not accessible to a synthetic non-login
+            # Unix UID. Copy only hash-pinned release code into a temporary
+            # root-owned, nonwritable executable directory.
+            trusted = base / "root-managed-code"
+            trusted.mkdir(mode=0o755)
+            source = ROOT / "signer_install_review_v1" / "code"
+            manifest = json.loads((source / "signer-code-manifest.json").read_text())
+            self.assertEqual(manifest["schema"], "sam.coop.signer-code-manifest.v1")
+            for name in (
+                "private_owner_signer_service_v1.py",
+                "run_private_owner_signer_service_v1.py",
+                "verify_signer_install_v1.py",
+            ):
+                self.assertEqual(
+                    hashlib.sha256((source / name).read_bytes()).hexdigest(),
+                    manifest["files"][name],
+                )
+                shutil.copyfile(source / name, trusted / name)
+                os.chmod(trusted / name, 0o644)
+                self.assertEqual((trusted / name).stat().st_uid, 0)
+            runner = trusted / "run_private_owner_signer_service_v1.py"
             private = base / "private"
             runtime = base / "runtime"
             private.mkdir(mode=0o700)
@@ -122,7 +143,7 @@ class DistinctUnixPrincipals(unittest.TestCase):
             })
 
             server = subprocess.Popen(
-                [sys.executable, "-I", str(RUNNER)],
+                [sys.executable, "-I", str(runner)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 env=env, preexec_fn=_drop(SIGNER_UID, IPC_GID, []),
             )

@@ -1,0 +1,8 @@
+{
+  "files": {
+    "private_owner_signer_service_v1.py": "6f81e08179be899f9ba8eeb7febc3d8c40208105af483c28043d32148c594587",
+    "run_private_owner_signer_service_v1.py": "252065ecda182c9466e048f5fb6c1efb436fd09691fd7d079712f0f85b6099f0",
+    "verify_signer_install_v1.py": "ab772bf5a3ab12dfdaa8656cda62d8a320bde8a68e226cdddb5559fb43b8e143"
+  },
+  "schema": "sam.coop.signer-code-manifest.v1"
+}

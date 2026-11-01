@@ -23,6 +23,15 @@ test("wire-format extraction recognizes actual reliable {n,b} CHECKPOINT",()=>{
  assert.equal(extractForwardedCheckpoint("host",JSON.stringify({a:5,s:[]})),null);
  assert.equal(extractForwardedCheckpoint("host",JSON.stringify({v:{kind:"CHECKPOINT"}})),null);
 });
+test("checkpoint extraction tolerates live piggybacked acknowledgements",()=>{
+ const frame=JSON.parse(wire("host",0,11));
+ frame.a=10;
+ frame.s=[12,13];
+ const parsed=extractForwardedCheckpoint("host",JSON.stringify(frame));
+ assert.equal(parsed.n,11);
+ assert.deepEqual(parsed.checkpoint,cp());
+ assert.equal(parsed.epoch,0);
+});
 test("relay-forwarded identical host and guest checkpoint yields bounded receipt",()=>{
  const log=make();
  const first=log.observeForwarded({seat:"host",text:wire("host",0,5)});
@@ -160,7 +169,7 @@ test("parsing assumptions remain aligned with the actual game transport",async()
    import.meta.url),"utf8");
  const kinds=readFileSync(new URL("../../src/coop/checkpoint-log.ts",
    import.meta.url),"utf8");
- assert.match(reliable,/JSON\.stringify\(\{\s*n,\s*b:\s*message\s*\}\)/);
+ assert.match(reliable,/JSON\.stringify\(\{\s*n,\s*b:\s*message(?:,\s*\.\.\.this\.takeOwedAck\(\))?\s*\}\)/);
  assert.match(reliable,/"n"\]\s*\)\s*&&\s*"b"\s+in\s+frame/);
  assert.ok(protocol.includes('env["kind"] === "SEQUENCED"'));
  assert.ok(protocol.includes("/^[0-9a-f]{14}$/"));

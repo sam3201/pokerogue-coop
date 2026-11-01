@@ -285,6 +285,53 @@ review-only experiments**, not an authorization, synchronization source
 or permission to redistribute textures. A real producer/receiver
 integration and live-device benchmark are still separate release gates.
 
+## Commit-bound trusted XOR baselines and fresh-run recovery
+
+`trusted_paired_delta_chain_v1.mjs` adds an **isolated, stateful,
+owner-key-pinned reviewer receiver** around the generic lossless byte
+codec. The receiver holds one privately copied baseline per seat,
+validates disposable Ed25519 statements against a trusted SPKI
+provisioned outside the packet, and strictly binds each statement to
+the intended run, seat, consecutive sequence, frame ID and signed
+baseline/target SHA-256 digests. The first sequence in a run must be
+a **signed full keyframe**. Later deltas always reconstruct from the
+last **successfully committed** pair, never from a sender-provided
+baseline or an uncommitted staged frame.
+
+A single pending pair is permitted. Both seats must verify and decode
+successfully before the pair becomes eligible for the existing
+`VerifiedPairCursor` and `PairedFramePresenter`. The receiver has
+explicit `stage`, `commit`, `discard` and `beginNewRun` operations:
+a failed renderer or rejected frame must leave the trusted baseline
+untouched. The supervising presentation controller must call
+`commit` with a matching admission *only after* successful atomic
+viewer commit; the receiver does not itself attest physical paint.
+When a frame is lost or the stream is reset, recovery requires a
+**new owner-provisioned run ID and signed full keyframe**, with the
+viewer and cursor reset together. Prior run IDs cannot be reused.
+This is a review API and not a production authorization protocol.
+
+`test_trusted_paired_delta_chain_v1.mjs` adds 10 regressions for
+sequence continuity, stale/cross-run rejection, unsigned/forged or
+corrupted packets, one-seat failure, commit-only baseline progression,
+mutated caller buffers, dense full-copy fallback and fresh-run recovery.
+The focused Node suite now reports **215/215 passing tests**.
+
+`run_trusted_paired_delta_chain_chromium_v1.mjs` runs real Chromium
+against an ephemeral signer, generated RGBA frames and the actual
+`VerifiedPairCursor` + `PairedFramePresenter`. It independently
+verifies that display remains unchanged until both seats are
+authenticated and the user commits; a forged signature, crossed seat,
+missing sequence or tampered delta is rejected; and explicit
+discard+fresh-run recovery displays the new signed keyframe.
+The last green hosted check for the implementation was
+[run #169](https://github.com/sam3201/pokerogue-coop/actions/runs/41270623523).
+
+The fixture is not the live gameplay relay, and its synthetic signer's
+key does not provide authority over production frames or game artwork.
+It must not be merged, deployed or used to bypass Pi provisioning,
+concurrent game workers or the existing public PNG/SSE viewer.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the

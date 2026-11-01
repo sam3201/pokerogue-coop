@@ -24,6 +24,18 @@ export class VerifiedPairCursor{
       throw Error("Invalid verified texture");
     bytes+=data.byteLength;
   }
+  // A signed XOR byte-frame carries substantial seat pixel arrays,
+  // not just texture blobs. Count those allocations against the same
+  // bounded verified-frame admission budget before cloning them.
+  for(const seat of ["sam","jevbot"]){
+   const pixels=pair.seats?.[seat]?.pixels;
+   if(pixels!==undefined){
+    if(!(pixels instanceof Uint8Array)||
+       !(pixels.buffer instanceof ArrayBuffer))
+     throw Error("Unsupported signed seat pixel data");
+    bytes+=pixels.byteLength;
+   }
+  }
   return bytes;
  }
 

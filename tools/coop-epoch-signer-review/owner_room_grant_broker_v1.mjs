@@ -132,7 +132,9 @@ export class PrivateRoomGrantBroker{
   item.closed=true;
   this.#observer.unregisterRoom(roomHandle);
   this.#rooms.delete(roomHandle);
-  if(item.runId)this.#runs.delete(item.runId);
+  // A runId is a one-use owner authorization identity, not a per-room
+  // lease. Closing a room revokes its active binding but must NOT release
+  // its identity for a new room while this broker is alive.
   return true;
  }
  get status(){

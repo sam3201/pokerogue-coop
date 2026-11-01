@@ -48,6 +48,26 @@ jobs:
       - name: Run isolated Node and Python relay gateway fixture
         working-directory: tools/coop-epoch-signer-review
         run: node run_real_disposable_peer_gateway_v1.mjs
+      - name: Run synthetic scene and private transport regression suite
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          mkdir -p texture-staging
+          node --test \
+            test_phaser_sprite_render.mjs test_field_sprite_cpu.mjs \
+            test_field_sprite_cpu_v2.mjs test_texture_registry_v1.mjs \
+            test_scene_asset_binding_v1.mjs test_texture_staging_v1.mjs \
+            test_scene_pair_signature_v1.mjs test_browser_asset_verify_v1.mjs \
+            test_browser_scene_pair_verify_v1.mjs \
+            test_real_pair_witness_v1.mjs test_paired_frame_cursor_v1.mjs \
+            test_private_epoch_capture_contract_v1.mjs \
+            test_owner_postrender_bridge_v1.mjs test_owner_epoch_seal_v1.mjs \
+            test_relay_checkpoint_gate_v1.mjs \
+            test_relay_observed_checkpoint_ledger_v1.mjs \
+            test_relay_room_checkpoint_adapter_v1.mjs \
+            test_owner_room_grant_broker_v1.mjs \
+            test_owner_room_grant_ipc_v1.mjs \
+            test_owner_signing_key_custody_v1.mjs \
+            test_capture_owner_room_enrollment_v1.mjs
       - name: Prove separate relay and capture Unix UIDs (disposable CI only)
         working-directory: tools/coop-epoch-signer-review
         run: sudo -n "$(command -v python)" -I test_distinct_uid_relay_gateway_v1.py

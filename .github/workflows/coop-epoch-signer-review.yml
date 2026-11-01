@@ -48,6 +48,9 @@ jobs:
       - name: Run isolated Node and Python relay gateway fixture
         working-directory: tools/coop-epoch-signer-review
         run: node run_real_disposable_peer_gateway_v1.mjs
+      - name: Prove separate relay and capture Unix UIDs (disposable CI only)
+        working-directory: tools/coop-epoch-signer-review
+        run: sudo -n "$(command -v python)" -I test_distinct_uid_relay_gateway_v1.py
       - name: Prove distinct Unix UID signer isolation (disposable CI only)
         working-directory: tools/coop-epoch-signer-review
         run: sudo -n "$(command -v python)" -I test_distinct_uid_signer_integration_v1.py

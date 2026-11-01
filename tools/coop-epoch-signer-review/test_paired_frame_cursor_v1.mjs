@@ -90,3 +90,25 @@ test("oversized verified scene bundle is not accepted into cursor",async()=>{
  await assert.rejects(c.stage(a),/memory budget/);
  assert.equal(c.status.queued,0);
 });
+
+test("staged verified data cannot be mutated after admission or via nextReady",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ const original=make(12);
+ await c.stage(original);
+ original.frameId=run+":8888";
+ original.seats.sam.frameId=run+":8888";
+ original.textures.values().next().value[0]=77;
+ const first=c.nextReady();
+ assert.equal(first.frameId,run+":12");
+ assert.equal(first.seats.sam.frameId,run+":12");
+ assert.equal(first.textures.values().next().value[0],1);
+ first.seats.jevbot.frameId=run+":1000";
+ first.textures.values().next().value[1]=99;
+ const second=c.nextReady();
+ assert.equal(second.seats.jevbot.frameId,run+":12");
+ assert.deepEqual([...second.textures.values().next().value],[1,2,3]);
+ const committed=c.commitNext(run+":12");
+ assert.equal(committed.seats.sam.frameId,run+":12");
+ committed.seats.jevbot.frameId="external mutation";
+ assert.equal(c.status.frameId,run+":12");
+});

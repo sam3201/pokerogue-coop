@@ -168,3 +168,28 @@ test("discard is forbidden during unfinished verification",async()=>{
  c.discardPending(a.frameId,a.admissionId);
  assert.equal(c.status.queued,0);
 });
+
+
+test("signed byte-frame pixel payloads count toward the cursor memory budget",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ const oversized=make(1);
+ oversized.seats.sam.pixels=new Uint8Array(9*1024*1024);
+ oversized.seats.jevbot.pixels=new Uint8Array(9*1024*1024);
+ await assert.rejects(c.stage(oversized),/Frame memory budget/);
+ assert.equal(c.status.queued,0);
+ assert.equal(c.status.runId,null);
+ const small=make(1);
+ small.seats.sam.pixels=new Uint8Array(320*180*4);
+ small.seats.jevbot.pixels=new Uint8Array(320*180*4);
+ await c.stage(small);
+ assert.equal(c.status.queued,1);
+ small.seats.sam.pixels[0]=77;
+ assert.equal(c.nextReady().seats.sam.pixels[0],0);
+});
+test("signed byte-frame payload requires an ordinary copied byte array",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ const invalid=make(1);
+ invalid.seats.sam.pixels={byteLength:320*180*4};
+ await assert.rejects(c.stage(invalid),/Unsupported signed seat pixel/);
+ assert.equal(c.status.queued,0);
+});

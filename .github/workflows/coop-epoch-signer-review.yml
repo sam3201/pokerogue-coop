@@ -44,7 +44,7 @@ jobs:
           node --check capture_owner_room_enrollment_v1.mjs
           node --check owner_room_grant_broker_v1.mjs
           node --check owner_room_grant_ipc_v1.mjs
-          node --test test_capture_owner_room_enrollment_v1.mjs
+          node --test test_capture_owner_room_enrollment_v1.mjs test_owner_room_grant_broker_v1.mjs
       - name: Run isolated Node and Python relay gateway fixture
         working-directory: tools/coop-epoch-signer-review
         run: node run_real_disposable_peer_gateway_v1.mjs

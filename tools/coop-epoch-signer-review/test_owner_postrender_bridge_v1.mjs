@@ -9,7 +9,7 @@ const scene={schema:"sam.coop.phaser-sprites.probe.v1",
  skipped:{},approximated:{fieldShader:0,geometryMask:0,spriteBase:0,spriteShadow:0},
  truncated:false}};
 function fake({screenshotError=false,evalError=false,frameTick=42,
-  hold=false}={}){
+  hold=false,leaseChanged=false}={}){
  const calls=[],pause={};
  let done;
  pause.promise=new Promise(r=>done=r);pause.release=done;
@@ -21,6 +21,10 @@ function fake({screenshotError=false,evalError=false,frameTick=42,
     if(evalError)throw Error("postrender timed out");
     if(hold)await pause.promise;
     return {postrender:true,frameTick,scene};
+   }
+   if(Object.hasOwn(arg,"frameTick")){
+    calls.push(["verify-lease",arg.frameTick]);
+    return !leaseChanged&&arg.frameTick===frameTick;
    }
    calls.push(["resume"]);
   },
@@ -44,6 +48,14 @@ test("postrender seat captures scene and image then always resumes",async()=>{
  assert.equal(p.calls.filter(x=>x[0]==="resume").length,1);
  assert.ok(p.calls.findIndex(x=>x[0]==="screenshot")<
    p.calls.findIndex(x=>x[0]==="resume"));
+});
+test("screenshot rejects a changed render lease before returning evidence",async()=>{
+ const p=fake({leaseChanged:true});
+ await assert.rejects(capturePostrenderSeat({
+  page:p,seat:"sam",relayCommitHash:HASH,captureSource:SRC
+ }),/lease changed/);
+ assert.equal(p.calls.filter(x=>x[0]==="verify-lease").length,1);
+ assert.equal(p.calls.filter(x=>x[0]==="resume").length,1);
 });
 test("screenshot exception still invokes the unfreeze handshake",async()=>{
  const p=fake({screenshotError:true});

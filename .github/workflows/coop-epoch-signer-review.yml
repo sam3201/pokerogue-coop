@@ -35,6 +35,19 @@ jobs:
             test_verify_signer_install_v1.py \
             test_staged_signer_isolated_entrypoint_v1.py \
             test_preflight_owner_isolation_v1.py
+      - name: Test isolated relay gateway and eleven-gate preflight
+        working-directory: tools/coop-epoch-signer-review
+        run: python -m unittest -q test_private_relay_peer_gateway_v1.py
+      - name: Test capture-owner enrollment and relay broker in Node
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          node --check capture_owner_room_enrollment_v1.mjs
+          node --check owner_room_grant_broker_v1.mjs
+          node --check owner_room_grant_ipc_v1.mjs
+          node --test test_capture_owner_room_enrollment_v1.mjs
+      - name: Run isolated Node and Python relay gateway fixture
+        working-directory: tools/coop-epoch-signer-review
+        run: node run_real_disposable_peer_gateway_v1.mjs
       - name: Prove distinct Unix UID signer isolation (disposable CI only)
         working-directory: tools/coop-epoch-signer-review
         run: sudo -n "$(command -v python)" -I test_distinct_uid_signer_integration_v1.py

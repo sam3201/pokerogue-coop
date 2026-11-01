@@ -94,6 +94,11 @@ jobs:
         timeout-minutes: 2
         run: |
           timeout --signal=TERM --kill-after=3s 75s node run_verified_atomic_browser_pipeline_v1.mjs
+      - name: Verify signed representation-agnostic XOR deltas in real Chromium
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 75s node run_signed_agnostic_delta_chromium_v1.mjs
       - name: Measure synthetic verified 48-frame paired scene compositor throughput
         working-directory: tools/coop-epoch-signer-review
         timeout-minutes: 2

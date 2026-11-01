@@ -87,6 +87,11 @@ jobs:
         timeout-minutes: 2
         run: |
           timeout --signal=TERM --kill-after=3s 75s node run_verified_atomic_browser_pipeline_v1.mjs
+      - name: Measure synthetic verified 48-frame paired scene compositor throughput
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 95s node run_synthetic_verified_frame_benchmark_v1.mjs
       - name: Install disposable relay WebSocket dependency
         run: npm install --prefix coop-server --no-save --no-audit --no-fund --ignore-scripts --package-lock=false ws@8.22.0
       - name: Run disposable real-relay observer and private grant V4-V6 fixtures

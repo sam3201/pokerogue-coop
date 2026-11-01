@@ -70,17 +70,20 @@ jobs:
           test ! -e /etc/systemd/system/sam-coop-owner-signer.service
           python - <<'PY'
           import json, subprocess
+          from preflight_owner_isolation_v1 import facts, assess
+          snapshot=facts()
+          assert all(snapshot[k] for k in (
+              "distinct_os_identities","distinct_relay_os_identity",
+              "signer_private_state_directory","root_owned_code_path"
+          )),snapshot
+          assert not snapshot["signer_private_key_metadata"]
+          assert not snapshot["root_owned_configuration"]
+          report=assess(snapshot)
+          assert not report["production_scene_eligible"]
           p=subprocess.run(["python","preflight_owner_isolation_v1.py"],
                            text=True,capture_output=True)
           assert p.returncode==2, p.stderr
-          data=json.loads(p.stdout)
-          assert all(data[k] for k in (
-              "distinct_os_identities","distinct_relay_os_identity",
-              "signer_private_state_directory","root_owned_code_path"
-          )),data
-          assert not data["production_scene_eligible"]
-          assert not data["signer_private_key_metadata"]
-          assert not data["root_owned_configuration"]
+          assert json.loads(p.stdout)==report
           print("STAGED_ONLY_PREFLIGHT_OK")
           PY
       - name: Verify reviewed code digests

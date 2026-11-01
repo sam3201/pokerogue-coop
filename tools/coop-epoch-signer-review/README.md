@@ -181,6 +181,57 @@ physical display latency. Real frame presentation frequency, framebuffer
 pixel parity, dynamic effects and sustained 30 FPS on the live game remain
 independent unpassed acceptance gates.
 
+## Agnostic XOR diagnostics — optional, byte-complete, commit-bound
+
+`agnostic_xor_frame_diagnostics_v1.mjs` adds an optional, bounded
+**post-verification diagnostic**, independent of frame admission. It
+scans the complete visible pixel bytes with XOR, counts changed pixels,
+changed channel bytes, flipped bits and dirty 8/16/32/64-pixel tiles, and
+records first-changed coordinates. Buffer, Uint8Array/ClampedArray,
+DataView, other ordinary typed-array views, or ArrayBuffer are accepted
+without assuming an input object type. One- through four-channel
+images and padded rows use a generic bytewise fallback. Properly
+aligned, tightly packed 4-channel RGBA instead uses a Uint32Array
+word-per-pixel fast path. A dedicated regression proves identical
+results between the two paths, including dirty-tile maps.
+
+The implementation explicitly rejects SharedArrayBuffer, mismatched
+dimensions/stride, excessive sizes, untrusted runs and repeated or
+out-of-order admission IDs. A two-phase `PrivateAgnosticXorPairTracker`
+only advances its baseline after a **successful atomic paired-frame
+viewer commit**, not when a candidate frame is staged, rejected or
+discarded. It snapshots bytes to prevent mutation after staging and
+retains an admission high-watermark across reset. Seat changes may
+legitimately differ: asymmetry is an **observation**, not automatic
+evidence of desynchronization.
+
+A folded XOR checksum is unsafe as a security fingerprint: two separate
+byte changes can cancel to zero. Our full-byte scan explicitly tests this
+counterexample. XOR diagnostics **never replace** a verified Ed25519
+signature, SHA-256 asset validation, trusted relay provenance, real
+scene attestation or producer-side replay protection. No XOR mask
+or raw pixels are published, sent through the relay or written to
+disk; the feature is disabled by default.
+
+GitHub Actions runs the synthetic 48-frame / 48-sprite-per-seat
+Chromium pipeline twice, once with no XOR and once with
+`SAM_XOR_DIAGNOSTIC=1`, and reports separate pixel readback and XOR
+scan times. In green hosted CI run #133:
+
+| Metric (hosted CI only) | XOR off | XOR on |
+| --- | ---: | ---: |
+| Total median to next requestAnimationFrame | 5.5 ms | 6.3 ms |
+| Total 95th percentile to next requestAnimationFrame | 21.6 ms | 21.4 ms |
+| XOR readback median / p95 | — | 0.3 / 0.5 ms |
+| Optimized XOR scan median / p95 | — | 0.5 / 0.8 ms |
+
+The enabled run completed 47 temporal comparisons, detected 47
+changed frame pairs and 61,619 changed seat-pixels in total. All
+48 synthetic transactions in each run were below 33.3 ms to rAF.
+Sample size and runner scheduling make the differences descriptive
+rather than a robust performance guarantee. The rAF callback happens
+before actual paint. Real gameplay remains unverified.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the

@@ -50,10 +50,20 @@ try{
     at:globalThis.__fixtureLoop?.frame,
     drawn:globalThis.__fixtureDrawTick
    }));
-   checks.push({seat,...observed});
    if(!observed.frozen||!observed.lease||observed.at!==observed.drawn)
     throw Error("Screenshot was not captured at postrender freeze");
-   return screenshot(opts);
+   const png=await screenshot(opts);
+   const after=await page.evaluate(()=>({
+    frozen:!!globalThis.__fixtureLoop?.asleep,
+    lease:!!globalThis.__samPrivateEpochFreeze,
+    at:globalThis.__fixtureLoop?.frame,
+    drawn:globalThis.__fixtureDrawTick
+   }));
+   checks.push({seat,...observed,after});
+   if(!after.frozen||!after.lease||after.at!==after.drawn||
+      observed.at!==after.at)
+    throw Error("Screenshot changed the frozen render frame");
+   return png;
   };
  }
  let checkpointReads=0;
@@ -92,7 +102,8 @@ try{
    completeScenes:receipts.sceneComplete
  }));
  if(!match||checkpointReads!==2||checks.length!==2||
-   checks.some(x=>!x.frozen||x.at!==x.drawn)||
+   checks.some(x=>!x.frozen||x.at!==x.drawn||
+      !x.after.frozen||!x.after.lease||x.after.at!==x.at)||
    Object.values(states).some(s=>s.asleep||s.lease)||
    Object.entries(frames).some(([seat,tick])=>
      tick!==receipts.frameTicks[seat])||
@@ -123,6 +134,37 @@ try{
   denied,unfrozen
  }));
  if(!denied||!unfrozen.every(Boolean))process.exitCode=1;
+ // Failure injection: an unrelated script advances the frozen frame
+ // after screenshot bytes were obtained but before the capture callback
+ // verifies its lease. The result must be rejected and both pages resumed.
+ const originalSamScreenshot=pages.sam.screenshot;
+ pages.sam.screenshot=async opts=>{
+  const buffer=await originalSamScreenshot(opts);
+  await pages.sam.evaluate(()=>{globalThis.__fixtureLoop.frame+=1;});
+  return buffer;
+ };
+ let tickChangeDenied=false;
+ try{
+  await preparePrivateEpoch({
+   runId,sequence:902,
+   readRelayCheckpoint:async()=>({runId,relayCommitHash,gameStateHash}),
+   captureSeat:(seat,ctx)=>capturePostrenderSeat({
+    page:pages[seat],seat,relayCommitHash:ctx.relayCommitHash,
+    captureSource:source,timeoutMs:9000
+   })
+  });
+ }catch(e){
+  tickChangeDenied=/lease changed/.test(String(e));
+ }
+ pages.sam.screenshot=originalSamScreenshot;
+ const unfrozenAfterTick=await Promise.all(Object.values(pages).map(page=>
+  page.evaluate(()=>!globalThis.__fixtureLoop.asleep &&
+    !globalThis.__samPrivateEpochFreeze)));
+ console.log("SYNTHETIC_TICK_CHANGE_REJECTION",JSON.stringify({
+  tickChangeDenied,unfrozen:unfrozenAfterTick
+ }));
+ if(!tickChangeDenied||!unfrozenAfterTick.every(Boolean))
+  process.exitCode=1;
  await ctx.close();
 }catch(e){
  console.error("SYNTHETIC_POSTRENDER_FAIL",String(e?.stack||e));

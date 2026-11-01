@@ -88,6 +88,18 @@ export async function capturePostrenderSeat({
   const png=await page.screenshot({timeout:Math.max(3000,timeoutMs),
     animations:"disabled"});
   if(signal?.aborted)throw Error("Capture canceled after screenshot");
+  // The browser is authoritative about whether our lease survived the
+  // asynchronous screenshot. An owner-supplied callback or external script
+  // may have woken the loop, advanced the tick, or replaced the lease.
+  // A screenshot is NOT same-postrender evidence if any of those changed.
+  const sameFrozenTick=await page.evaluate(({token,frameTick})=>{
+    const lease=globalThis.__samPrivateEpochFreeze;
+    return lease?.token===token&&lease.frozen===true&&
+      lease.loop?.frame===frameTick;
+  },{token,frameTick:state.frameTick});
+  if(sameFrozenTick!==true)
+    throw Error("Private postrender frame lease changed during screenshot");
+  if(signal?.aborted)throw Error("Capture canceled after lease verification");
   return {seat,postrender:true,frameTick:state.frameTick,relayCommitHash,
     png,scene:state.scene};
  }catch(e){primaryFailure=e;throw e;}

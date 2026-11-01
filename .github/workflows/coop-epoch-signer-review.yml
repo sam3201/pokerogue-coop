@@ -56,6 +56,33 @@ jobs:
         run: sudo -n "$(command -v python)" -I test_distinct_uid_signer_integration_v1.py
       - name: Check owner-gated relay patch compatibility without applying
         run: git apply --check tools/coop-epoch-signer-review/RELAY_OWNER_SIGNED_ROOM_GRANT_V3.patch
+      - name: Verify opt-in identity bootstrap on disposable CI host
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          bash stage_owner_isolation_v1.sh --plan
+          if ! getent passwd sam3201 >/dev/null; then
+            sudo -n useradd --system --user-group --no-create-home --shell /usr/sbin/nologin sam3201
+          fi
+          sudo -n bash stage_owner_isolation_v1.sh --apply
+          sudo -n bash stage_owner_isolation_v1.sh --verify
+          sudo -n bash stage_owner_isolation_v1.sh --apply
+          test ! -e /var/lib/sam-coop-signer/owner-ed25519.pk8
+          test ! -e /etc/systemd/system/sam-coop-owner-signer.service
+          python - <<'PY'
+          import json, subprocess
+          p=subprocess.run(["python","preflight_owner_isolation_v1.py"],
+                           text=True,capture_output=True)
+          assert p.returncode==2, p.stderr
+          data=json.loads(p.stdout)
+          assert all(data[k] for k in (
+              "distinct_os_identities","distinct_relay_os_identity",
+              "signer_private_state_directory","root_owned_code_path"
+          )),data
+          assert not data["production_scene_eligible"]
+          assert not data["signer_private_key_metadata"]
+          assert not data["root_owned_configuration"]
+          print("STAGED_ONLY_PREFLIGHT_OK")
+          PY
       - name: Verify reviewed code digests
         working-directory: tools/coop-epoch-signer-review
         run: |

@@ -120,7 +120,9 @@ try{
    failRenderer:value=>{failSecondSeat=value;},
    failCommitOnce:()=>{failReceiverCommit=true;},
    discardAndRecover(runId){
-    controller.cancelPending();
+    // Poisoned postcommit failures have already discarded pending receiver
+    // state and blanked the viewer. Only a new owner-supplied run is valid.
+    if(!controller.status.poisoned)controller.cancelPending();
     controller.recoverNewRun(runId);
     return receiver.status;
    },

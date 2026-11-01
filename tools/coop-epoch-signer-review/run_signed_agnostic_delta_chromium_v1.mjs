@@ -164,11 +164,7 @@ try{
    }
   };
  },{runId,pinnedSpki,SCHEMA,width,height});
- const stage=(sequence,raw)=>page.evaluate(({sequence,raw})=>
-  window.__deltaBrowser.stage({
-   runId,sequence,frameId:runId+":"+sequence,...raw
-  }),{sequence,raw}); // runId supplied from trusted callback below
- // Evaluate serializable values with the expected run fixed by this test.
+ // The test supplies the expected run independently of both seat packets.
  const doStage=async(sequence,raw)=>page.evaluate(
   ({runId,sequence,raw})=>window.__deltaBrowser.stage({
    runId,sequence,frameId:runId+":"+sequence,...raw

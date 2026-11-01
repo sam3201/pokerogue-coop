@@ -59,6 +59,7 @@ jobs:
             test_scene_pair_signature_v1.mjs test_browser_asset_verify_v1.mjs \
             test_browser_scene_pair_verify_v1.mjs \
             test_real_pair_witness_v1.mjs test_paired_frame_cursor_v1.mjs \
+            test_agnostic_xor_frame_diagnostics_v1.mjs \
             test_private_epoch_capture_contract_v1.mjs \
             test_owner_postrender_bridge_v1.mjs test_owner_epoch_seal_v1.mjs \
             test_relay_checkpoint_gate_v1.mjs \
@@ -92,6 +93,7 @@ jobs:
         timeout-minutes: 2
         run: |
           timeout --signal=TERM --kill-after=3s 95s node run_synthetic_verified_frame_benchmark_v1.mjs
+          SAM_XOR_DIAGNOSTIC=1 timeout --signal=TERM --kill-after=3s 95s node run_synthetic_verified_frame_benchmark_v1.mjs
       - name: Install disposable relay WebSocket dependency
         run: npm install --prefix coop-server --no-save --no-audit --no-fund --ignore-scripts --package-lock=false ws@8.22.0
       - name: Run disposable real-relay observer and private grant V4-V6 fixtures

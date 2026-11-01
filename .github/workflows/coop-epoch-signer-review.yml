@@ -84,6 +84,9 @@ jobs:
       - name: Prove distinct Unix UID signer isolation (disposable CI only)
         working-directory: tools/coop-epoch-signer-review
         run: sudo -n "$(command -v python)" -I test_distinct_uid_signer_integration_v1.py
+      - name: Prove combined relay gateway and signer authorization with distinct Linux UIDs
+        working-directory: tools/coop-epoch-signer-review
+        run: sudo -n "$(command -v python)" -I test_three_principal_room_enrollment_v1.py
       - name: Check owner-gated relay patch compatibility without applying
         run: git apply --check tools/coop-epoch-signer-review/RELAY_OWNER_SIGNED_ROOM_GRANT_V3.patch
       - name: Verify opt-in identity bootstrap on disposable CI host

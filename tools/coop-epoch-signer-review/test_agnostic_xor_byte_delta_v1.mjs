@@ -121,7 +121,7 @@ test("malformed, zero, out-of-bounds, truncated and overlapping XOR runs reject"
  const fix=async payload=>assert.rejects(decodeAgnosticXorDelta({
   before:a,packet:{...p,payload},
   trustedBaseSha256:sha(a),trustedTargetSha256:sha(b)
- }),/run|delta size|SHA-256|packet/);
+ }),/run|delta size|SHA-256|packet|Noncanonical/);
  const mod=(n,value)=>{const x=new Uint8Array(p.payload);x[n]=value;return x;};
  await fix(p.payload.subarray(0,5)); // short header
  await fix(mod(4,0)); // zero length

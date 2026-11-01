@@ -46,7 +46,8 @@ export class PairedFramePresenter {
    slot.className="sam-private-paired-seat";
    const node=this.#renderSeat({
     seat,scene:pair.seats[seat],textures:pair.textures,
-    frameId:pair.frameId,sequence:pair.sequence,runId:pair.runId
+    frameId:pair.frameId,sequence:pair.sequence,runId:pair.runId,
+    admissionId:pair.admissionId
    });
    if(!node||node.nodeType!==1||node.ownerDocument!==doc||
       node.parentNode!==null||node.isConnected||

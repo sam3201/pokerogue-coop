@@ -68,6 +68,15 @@ jobs:
             test_owner_room_grant_ipc_v1.mjs \
             test_owner_signing_key_custody_v1.mjs \
             test_capture_owner_room_enrollment_v1.mjs
+      - name: Install isolated synthetic Chromium fixture dependency
+        run: |
+          npm install --prefix tools/coop-epoch-signer-review --no-save --no-audit --no-fund --ignore-scripts --package-lock=false @playwright/test@1.64.1
+          (cd tools/coop-epoch-signer-review && npx --no-install playwright install chromium)
+      - name: Verify two-tab Phaser postrender freeze and failure cleanup
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 95s node run_synthetic_two_seat_postrender_v1.mjs
       - name: Install disposable relay WebSocket dependency
         run: npm install --prefix coop-server --no-save --no-audit --no-fund --ignore-scripts --package-lock=false ws@8.22.0
       - name: Run disposable real-relay observer and private grant V4-V6 fixtures

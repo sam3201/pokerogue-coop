@@ -133,10 +133,13 @@ try{
     if(ids[0]!==committed.frameId||ids[1]!==committed.frameId)
      throw Error("Cross-seat epoch mismatch");
     await new Promise(resolve=>requestAnimationFrame(resolve));
-    const painted=time();
+    // requestAnimationFrame fires before the following compositor paint.
+    // This measures time to the next animation-frame callback, not a
+    // screenshot-verified paint or an actual display refresh.
+    const nextRaf=time();
     steps.push({verifyMs:verified-start,renderMs:rendered-verified,
      prepareMs:prepared-rendered,commitMs:swapped-prepared,
-     toPaintMs:painted-swapped,totalMs:painted-start});
+     toNextRafMs:nextRaf-swapped,totalToRafMs:nextRaf-start});
     visible.push(committed.frameId);
     return committed.step;
    },
@@ -151,9 +154,9 @@ try{
      monotonic:visible.every((id,i)=>id.endsWith(":"+(i+1))),
      manualStage:false,productionEligible:false,
      verify:measure("verifyMs"),render:measure("renderMs"),
-     commit:measure("commitMs"),toPaint:measure("toPaintMs"),
-     total:measure("totalMs"),
-     fractionUnder33ms:+(steps.filter(x=>x.totalMs<=33.333).length/
+     commit:measure("commitMs"),toNextRaf:measure("toNextRafMs"),
+     totalToRaf:measure("totalToRafMs"),
+     fractionToRafUnder33ms:+(steps.filter(x=>x.totalToRafMs<=33.333).length/
        Math.max(1,steps.length)).toFixed(3)};
    }
   };

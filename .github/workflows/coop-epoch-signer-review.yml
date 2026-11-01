@@ -60,6 +60,7 @@ jobs:
             test_browser_scene_pair_verify_v1.mjs \
             test_real_pair_witness_v1.mjs test_paired_frame_cursor_v1.mjs \
             test_agnostic_xor_frame_diagnostics_v1.mjs \
+            test_agnostic_xor_byte_delta_v1.mjs \
             test_private_epoch_capture_contract_v1.mjs \
             test_owner_postrender_bridge_v1.mjs test_owner_epoch_seal_v1.mjs \
             test_relay_checkpoint_gate_v1.mjs \
@@ -69,6 +70,11 @@ jobs:
             test_owner_room_grant_ipc_v1.mjs \
             test_owner_signing_key_custody_v1.mjs \
             test_capture_owner_room_enrollment_v1.mjs
+      - name: Measure lossless agnostic XOR byte-delta payload and decode on generated frames
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 85s node run_agnostic_xor_byte_delta_benchmark_v1.mjs
       - name: Install isolated synthetic Chromium fixture dependency
         run: |
           npm install --prefix tools/coop-epoch-signer-review --no-save --no-audit --no-fund --ignore-scripts --package-lock=false @playwright/test@1.64.1

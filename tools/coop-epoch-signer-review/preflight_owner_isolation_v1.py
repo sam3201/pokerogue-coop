@@ -44,6 +44,22 @@ def metadata(path, uid, mode, *, directory=False):
                  else stat.S_ISREG(st.st_mode) and st.st_nlink == 1))
 
 
+def root_controlled_ancestors(path):
+    """Reject symlinked or non-root-managed ancestors of trusted paths."""
+    p = Path(path)
+    if not p.is_absolute():
+        return False
+    for parent in p.parents:
+        try:
+            st = os.lstat(parent)
+        except (OSError, ValueError):
+            return False
+        if (st.st_uid != 0 or not stat.S_ISDIR(st.st_mode)
+                or stat.S_IMODE(st.st_mode) & 0o022):
+            return False
+    return True
+
+
 def identity_gate():
     try:
         signer = pwd.getpwnam("sam-coop-signer")
@@ -118,18 +134,23 @@ def facts():
         "distinct_os_identities": identities,
         "distinct_relay_os_identity": relay_identity,
         "relay_runtime_root_directory": group_directory(
-            RELAY_RUNTIME_DIR, relay_uid, group_gid, 0o750),
+            RELAY_RUNTIME_DIR, relay_uid, group_gid, 0o750)
+            and root_controlled_ancestors(RELAY_RUNTIME_DIR),
         "relay_capture_gateway_directory": group_directory(
             RELAY_EXTERNAL_DIR, relay_uid, group_gid, 0o750),
         "relay_private_backend_directory": metadata(
             RELAY_INTERNAL_DIR, relay_uid, 0o700, directory=True),
         "signer_private_state_directory": metadata(
-            STATE_DIR, signer_uid, 0o700, directory=True),
+            STATE_DIR, signer_uid, 0o700, directory=True)
+            and root_controlled_ancestors(STATE_DIR),
         "signer_private_key_metadata": metadata(KEY, signer_uid, 0o600),
         "root_owned_code_path": code_path_root_owned(),
-        "root_owned_configuration": metadata(CONFIG, 0, 0o600),
-        "root_owned_service_unit": metadata(UNIT, 0, 0o644),
-        "runtime_socket_directory": runtime_ok,
+        "root_owned_configuration": metadata(CONFIG, 0, 0o600)
+            and root_controlled_ancestors(CONFIG),
+        "root_owned_service_unit": metadata(UNIT, 0, 0o644)
+            and root_controlled_ancestors(UNIT),
+        "runtime_socket_directory": runtime_ok
+            and root_controlled_ancestors(RUNTIME_DIR),
     }
 
 

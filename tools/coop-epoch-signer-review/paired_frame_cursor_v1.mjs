@@ -26,6 +26,22 @@ export class VerifiedPairCursor{
   }
   return bytes;
  }
+
+ // Admit a detached snapshot of the independently verified pair.
+ // Uint8Array cannot be frozen safely; every public read gets fresh bytes.
+ #snapshot(pair){
+  let seats;
+  try{seats=structuredClone(pair.seats);}
+  catch{throw Error("Uncloneable verified seat scenes");}
+  if(!seats?.sam||!seats?.jevbot)
+    throw Error("Missing seat scenes");
+  const textures=new Map();
+  for(const [href,data] of pair.textures)
+    textures.set(href,new Uint8Array(data));
+  return {scope:pair.scope,frameId:pair.frameId,
+    runId:pair.runId,sequence:pair.sequence,seats,textures};
+ }
+
  async stage(args){
   if(this.#pending)throw Error("Concurrent pair verification blocked");
   if(this.#queued.length>=LIMIT_PAIRS)throw Error("Paired frame buffer full");
@@ -46,15 +62,16 @@ export class VerifiedPairCursor{
      throw Error("Cross-run paired frame rejected");
    if(this.#latestSeq!==0&&pair.sequence!==this.#latestSeq+1)
      throw Error("Out-of-order, missing or replayed frame");
-   this.#runId=pair.runId;
-   this.#latestSeq=pair.sequence;
-   this.#queued.push({pair,bytes});
+   const admitted=this.#snapshot(pair);
+   this.#runId=admitted.runId;
+   this.#latestSeq=admitted.sequence;
+   this.#queued.push({pair:admitted,bytes});
    this.#bytes+=bytes;
    return this.status;
   }finally{this.#pending=false;}
  }
  nextReady(){
-  return this.#queued.length?this.#queued[0].pair:null;
+  return this.#queued.length?this.#snapshot(this.#queued[0].pair):null;
  }
  commitNext(frameId){
   const top=this.#queued[0];
@@ -68,7 +85,8 @@ export class VerifiedPairCursor{
   this.#ordinal=expectedOrdinal;
   return Object.freeze({step:this.#ordinal,frameId:this.#current.frameId,
     runId:this.#runId,sequence:this.#current.sequence,
-    seats:this.#current.seats,previousFrameId:previous?.frameId??null});
+    seats:structuredClone(this.#current.seats),
+    previousFrameId:previous?.frameId??null});
  }
  reset(){
   if(this.#pending)throw Error("Cannot reset during verification");

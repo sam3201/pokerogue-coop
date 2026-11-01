@@ -29,6 +29,34 @@ The GitHub Actions workflow runs the focused security tests, Node adapter
 tests, disposable Node/Python gateway fixture, both root-only separate-UID
 integration tests, hash verification and the unapplied patch check.
 
+## Guarded account/code staging — not automatically applied to the Pi
+
+`stage_owner_isolation_v1.sh` is an opt-in bootstrap for a reviewed
+Linux machine. The default mode (`--plan`) only validates pinned sources
+and describes intended writes. On a disposable Linux CI runner,
+`--apply` and `--verify` prove creation of separate non-login signer,
+capture, relay and game identities; the isolated IPC group; a root-owned
+digest-verified signer code tree; and an **empty** private state directory.
+A second `--apply` must succeed idempotently.
+
+The script deliberately does NOT install signing keys, create a pin,
+enable a service, open IPC, alter the live relay/game, or make scenes
+production-eligible. Its 11-check preflight must still be fail-closed.
+
+The remote management interface rejected the proposed privileged Pi
+execution, so **the script was NOT applied to that device**. No account,
+key or service provisioning should be claimed for the Pi from passing CI.
+A trusted administrator should review the exact commit and coordinate
+with the owner of the Mac/Pi migration before running it on the Pi.
+
+## Replay-hardening correction
+
+A closed relay room must revoke its active observer registration without
+releasing the single-use `runId` for reauthorization to another room.
+The review broker retains spent run IDs for its process lifetime and has
+a dedicated negative regression test. This code is NOT applied to the
+currently active relay.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the

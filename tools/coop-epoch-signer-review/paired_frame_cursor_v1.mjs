@@ -93,6 +93,23 @@ export class VerifiedPairCursor{
     seats:structuredClone(this.#current.seats),
     previousFrameId:previous?.frameId??null});
  }
+ // Reject one staged, not-yet-committed pair without losing the last
+ // visible/committed frame. Keep the admission counter monotonic so a
+ // discarded pane can never be replayed with the same admission ID.
+ // Restrict this operation to a single pending entry; removing the head
+ // of a longer queue would make all later verification context ambiguous.
+ discardPending(frameId,admissionId){
+  if(this.#pending||this.#queued.length!==1)
+   throw Error("Exactly one completed pending frame required");
+  const top=this.#queued[0];
+  if(top.pair.frameId!==frameId||top.id!==admissionId)
+   throw Error("Stale paired discard admission");
+  this.#queued.length=0;
+  this.#bytes=0;
+  this.#latestSeq=this.#current?.sequence??0;
+  this.#runId=this.#current?.runId??null;
+  return this.status;
+ }
  reset(){
   if(this.#pending)throw Error("Cannot reset during verification");
   this.#queued.length=0;this.#current=null;this.#runId=null;

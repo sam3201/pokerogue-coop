@@ -103,6 +103,16 @@ test("grant replay and concurrently reusing run identity rejected",()=>{
   ROOM2,b.challenge,"bb".repeat(16),RUN2)),true);
  assert.equal(x.broker.status.authorized,2);
 });
+test("closed room permanently spends its runId during broker lifetime",()=>{
+ const x=rig(),first=x.create();
+ assert.equal(x.broker.authorize(x.grant(ROOM,first.challenge)),true);
+ assert.equal(x.broker.onRoomClosed({roomHandle:ROOM}),true);
+ const second=x.create(ROOM2,"bb".repeat(16));
+ assert.equal(x.broker.authorize(x.grant(
+   ROOM2,second.challenge,"bb".repeat(16),RUN)),false);
+ assert.equal(x.broker.authorize(x.grant(
+   ROOM2,second.challenge,"bb".repeat(16),RUN2)),true);
+});
 test("room close revokes binding; late packet and replay fail",()=>{
  const x=rig(),c=x.create();
  const signed=x.grant(ROOM,c.challenge);

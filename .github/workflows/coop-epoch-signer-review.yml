@@ -59,6 +59,7 @@ jobs:
       - name: Verify opt-in identity bootstrap on disposable CI host
         working-directory: tools/coop-epoch-signer-review
         run: |
+          bash stage_owner_isolation_v1.sh
           bash stage_owner_isolation_v1.sh --plan
           if ! getent passwd sam3201 >/dev/null; then
             sudo -n useradd --system --user-group --no-create-home --shell /usr/sbin/nologin sam3201

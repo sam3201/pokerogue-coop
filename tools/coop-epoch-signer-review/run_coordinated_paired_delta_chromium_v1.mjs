@@ -162,7 +162,7 @@ try{
  report=await read();
  assert.equal(report.receiver.committedSequence,null);
  assert.equal(report.viewer.step,0);
- await assert.rejects(stage(await signedPair(firstRun,2)),/pending/);
+ await assert.rejects(stage(await signedPair(firstRun,2)),/Commit or discard/);
  const accepted1=await press();
  assert.equal(accepted1.sequence,1);
  report=await read();

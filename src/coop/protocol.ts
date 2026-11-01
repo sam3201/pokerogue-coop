@@ -420,6 +420,8 @@ export const COOP_STARTER_POINTS = 15;
  * - `timedEvents`: the timed events of the run (D33), those both players' clocks have on
  */
 export interface StartPayload {
+  /** Host-selected; omitted only by legacy protocol fixtures, defaults host. */
+  rewardPriority?: "host" | "guest" | "alternate";
   runSeed: string;
   starters: Record<Seat, CoopStarter[]>;
   snapshots: CoopAccountSnapshot;
@@ -457,6 +459,10 @@ export function isStartPayload(value: unknown): value is StartPayload {
     })
     && isCoopAccountSnapshot(start["snapshots"])
     && isTimedEventNames(start["timedEvents"])
+    && (start["rewardPriority"] === undefined
+      || start["rewardPriority"] === "host"
+      || start["rewardPriority"] === "guest"
+      || start["rewardPriority"] === "alternate")
   );
 }
 

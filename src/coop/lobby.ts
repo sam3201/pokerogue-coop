@@ -76,6 +76,8 @@ let collectionExchange: CollectionExchange | null = null;
 /** How long the lobby waits for the partner's collection before opening the starter select without it */
 const COLLECTION_TIMEOUT_MS = 15_000;
 let joinCode: string | null = null;
+/** Host-only per-room preference, transferred in START; never client-local simulation state. */
+let hostRewardPriority: "host" | "guest" | "alternate" = "host";
 /** Stops the resync of the session (D13) */
 let stopResync: (() => void) | null = null;
 /** What "Continue" does (D21): `rejoin.ts` sets it, so that this module does not import it */
@@ -400,6 +402,24 @@ export function showJoinCode(code: string, cancel: () => void): void {
           },
         },
         {
+          label: "Reward picker: Host / Guest / Alternate (cycle)",
+          keepOpen: true,
+          handler: () => {
+            hostRewardPriority =
+              hostRewardPriority === "host" ? "guest" : hostRewardPriority === "guest" ? "alternate" : "host";
+            ui.showText(
+              "After-battle reward priority: "
+                + hostRewardPriority
+                + ". Both players will receive this choice when the run starts.",
+              null,
+              undefined,
+              null,
+              false,
+            );
+            return true;
+          },
+        },
+        {
           label: i18next.t("menu:cancel"),
           handler: () => {
             cancel();
@@ -497,9 +517,13 @@ async function enterLobby(session: CoopSession, link: CoopLink, callbacks: CoopT
     link,
     sharedLimit: COOP_STARTER_POINTS,
     makeRunSeed: () => session.runSeed,
+    rewardPriority: () => hostRewardPriority,
     localEvents: () => timedEventManager.eventsByClock(),
   });
   starterLobby = lobby;
+  lobby.onStart(start => {
+    session.setRewardPriority(start.rewardPriority ?? "host");
+  });
   // The starter select shows the Pokémon of both players (D32): it opens once the partner's are here
   const exchange = new CollectionExchange(link, captureCollection(globalScene.gameData));
   collectionExchange = exchange;
@@ -532,6 +556,7 @@ async function hostGame(callbacks: CoopTitleCallbacks): Promise<void> {
     showFailure(new Error("overrides in effect"), callbacks);
     return;
   }
+  hostRewardPriority = "host";
   let room: HostRoom | null = null;
   let cancelled = false;
   const cancel = (): void => {

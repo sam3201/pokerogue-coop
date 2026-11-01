@@ -516,7 +516,7 @@ export class SelectModifierPhase extends BattlePhase {
   private startSequenced(): void {
     const session = requireCoopSession();
     this.screen = session.rewardPickCount - 1;
-    this.picker = rewardPickerOf(this.screen);
+    this.picker = rewardPickerOf(this.screen, session.rewardPriority);
     this.takingOver = session.rewardTakeover === this.screen;
     this.stopWatchingRejections = session.link!.sequencer.onProposalRejected(({ key, reason }) =>
       this.onRejected(key, reason),

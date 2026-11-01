@@ -67,6 +67,7 @@ export class GameOverPhase extends BattlePhase {
     // Situations such as when player lost a battle, but it isn't treated as full Game Over
     if (
       !this.isVictory
+      && !getCoopSession()?.eliminatedSeat
       && globalScene.currentBattle.mysteryEncounter?.onGameOver
       && !globalScene.currentBattle.mysteryEncounter.onGameOver()
     ) {
@@ -91,7 +92,7 @@ export class GameOverPhase extends BattlePhase {
     }
 
     // Co-op (D4a): after a wipe the host chooses to retry the wave or end the run; `enableRetries` is not read (it is pinned)
-    if (!this.isVictory && globalScene.gameMode.isCoop && this.decideCoopRetry()) {
+    if (!this.isVictory && globalScene.gameMode.isCoop && !getCoopSession()?.eliminatedSeat && this.decideCoopRetry()) {
       return;
     }
 

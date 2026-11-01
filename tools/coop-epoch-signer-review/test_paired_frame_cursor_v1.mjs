@@ -1,0 +1,92 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {VerifiedPairCursor} from "./paired_frame_cursor_v1.mjs";
+const run="12345678-1234-4123-8123-123456789abc";
+const other="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const make=(sequence,runId=run)=>{
+ const frameId=runId+":"+sequence;
+ return {scope:"private-staging-only",runId,sequence,frameId,
+  seats:{sam:{frameId,view:"sam"},
+    jevbot:{frameId,view:"jevbot"}},
+  textures:new Map([["/images/approved-sha256/test.png",new Uint8Array([1,2,3])]])};
+};
+test("manual cursor remains at step 0 until complete paired commit",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ assert.deepEqual(c.status.step,0);
+ await c.stage(make(9));
+ assert.equal(c.status.step,0);
+ assert.equal(c.status.queued,1);
+ assert.equal(c.status.frameId,null);
+ assert.equal(c.nextReady().frameId,run+":9");
+ const committed=c.commitNext(run+":9");
+ assert.equal(committed.step,1);
+ assert.equal(committed.seats.sam.frameId,committed.seats.jevbot.frameId);
+ assert.equal(c.status.queued,0);
+ assert.equal(c.status.frameId,run+":9");
+});
+test("two verified commits advance one paired frame per button press",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ await c.stage(make(100));
+ await c.stage(make(101));
+ assert.equal(c.status.step,0);
+ const f1=c.commitNext(run+":100");
+ assert.equal(f1.step,1);
+ assert.equal(f1.frameId,run+":100");
+ assert.equal(c.status.queued,1);
+ const f2=c.commitNext(run+":101");
+ assert.equal(f2.step,2);
+ assert.equal(f2.previousFrameId,run+":100");
+ assert.equal(f2.seats.sam.frameId,f2.seats.jevbot.frameId);
+});
+test("stale, cross-seat, missing-frame and cross-run input does not queue",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ await c.stage(make(4));
+ for(const candidate of [make(4),make(6),make(5,other),
+  {...make(5),frameId:"bogus"},
+  {...make(5),seats:{sam:{},jevbot:null}}]){
+  await assert.rejects(c.stage(candidate));
+  assert.equal(c.status.queued,1);
+ }
+ assert.equal(c.nextReady().frameId,run+":4");
+});
+test("invalid commit never consumes the ready pair",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ await c.stage(make(1));
+ assert.throws(()=>c.commitNext(run+":2"));
+ assert.equal(c.status.step,0);
+ assert.equal(c.status.queued,1);
+ c.commitNext(run+":1");
+ assert.throws(()=>c.commitNext(run+":1"));
+ assert.equal(c.status.step,1);
+});
+test("verification failure and pending stage do not advance the display",async()=>{
+ let resolve;
+ const c=new VerifiedPairCursor({verifier:()=>new Promise(r=>resolve=r)});
+ const waiting=c.stage(make(1));
+ assert.equal(c.status.waiting,true);
+ await assert.rejects(c.stage(make(2)),/Concurrent/);
+ assert.equal(c.nextReady(),null);
+ resolve(make(1));
+ await waiting;
+ assert.equal(c.status.waiting,false);
+ assert.equal(c.status.step,0);
+ assert.equal(c.status.queued,1);
+});
+test("buffer capacity and explicit reset protect against future run reuse",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ for(let i=1;i<=4;i++)await c.stage(make(i));
+ await assert.rejects(c.stage(make(5)),/buffer full/);
+ assert.throws(()=>c.commitNext(run+":5"));
+ assert.equal(c.status.queued,4);
+ c.reset();
+ assert.deepEqual([c.status.step,c.status.queued,c.status.runId],[0,0,null]);
+ await c.stage(make(1,other));
+ assert.equal(c.nextReady().frameId,other+":1");
+});
+test("oversized verified scene bundle is not accepted into cursor",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ const a=make(1);
+ a.textures=new Map([["approved",new Uint8Array(16*1024*1024+1)]]);
+ await assert.rejects(c.stage(a),/memory budget/);
+ assert.equal(c.status.queued,0);
+});

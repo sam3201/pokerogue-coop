@@ -77,6 +77,11 @@ jobs:
         timeout-minutes: 2
         run: |
           timeout --signal=TERM --kill-after=3s 95s node run_synthetic_two_seat_postrender_v1.mjs
+      - name: Verify atomic manual paired-frame 0-to-1-to-2 presentation in Chromium
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 75s node run_atomic_paired_manual_step_v1.mjs
       - name: Install disposable relay WebSocket dependency
         run: npm install --prefix coop-server --no-save --no-audit --no-fund --ignore-scripts --package-lock=false ws@8.22.0
       - name: Run disposable real-relay observer and private grant V4-V6 fixtures

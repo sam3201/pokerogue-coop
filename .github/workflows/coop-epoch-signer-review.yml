@@ -68,6 +68,16 @@ jobs:
             test_owner_room_grant_ipc_v1.mjs \
             test_owner_signing_key_custody_v1.mjs \
             test_capture_owner_room_enrollment_v1.mjs
+      - name: Install disposable relay WebSocket dependency
+        run: npm install --prefix coop-server --no-save --no-audit --no-fund --ignore-scripts --package-lock=false ws@8.22.0
+      - name: Run disposable real-relay observer and private grant V4-V6 fixtures
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          node --version
+          timeout --signal=TERM --kill-after=2s 40s node run_real_disposable_relay_observer_v1.mjs
+          timeout --signal=TERM --kill-after=2s 40s node run_real_disposable_owner_ipc_v4.mjs
+          timeout --signal=TERM --kill-after=2s 40s node run_real_disposable_key_custody_v5.mjs
+          timeout --signal=TERM --kill-after=2s 40s node run_real_disposable_signer_process_v6.mjs
       - name: Prove separate relay and capture Unix UIDs (disposable CI only)
         working-directory: tools/coop-epoch-signer-review
         run: sudo -n "$(command -v python)" -I test_distinct_uid_relay_gateway_v1.py

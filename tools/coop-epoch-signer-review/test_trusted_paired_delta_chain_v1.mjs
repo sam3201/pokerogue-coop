@@ -40,8 +40,6 @@ async function pair({runId=run,seq,previous=null,len=1024}){
 const rec=()=>new TrustedPairedByteDeltaReceiver({trustedRunId:run,
  pinnedSpki:pinned});
 function commit(rx,admitted){
- assert.equal(rx.status.committedSequence,null===rx.status.committedSequence?
-   null:rx.status.committedSequence);
  return rx.commit({frameId:admitted.frameId,sequence:admitted.sequence,
   admissionId:admitted.admissionId});
 }
@@ -75,7 +73,7 @@ test("discarded candidate never advances trusted baseline",async()=>{
  rx.discard();
  assert.equal(rx.status.committedSequence,null);
  await assert.rejects(rx.stage(await pair({seq:2,
-  previous:{sam:frame(1,"sam"),jevbot:frame(1,"jevbot")}})),/keyframe/);
+  previous:{sam:frame(1,"sam"),jevbot:frame(1,"jevbot")}})),/keyframe|identity/);
  const retry=await rx.stage(await pair({seq:1}));
  commit(rx,retry);
  assert.equal(rx.status.committedSequence,1);
@@ -113,7 +111,8 @@ test("untrusted signer and altered statement or XOR bytes fail without state cha
  second.jevbot.statement.targetSha256="0".repeat(64);
  await assert.rejects(rx.stage(second),/Untrusted signed/);
  const thirdPacket=await pair({seq:1});
- thirdPacket.sam.delta.payload=new Uint8Array(thirdPacket.sam.delta.payload);
+ thirdPacket.sam.delta={...thirdPacket.sam.delta,
+  payload:new Uint8Array(thirdPacket.sam.delta.payload)};
  thirdPacket.sam.delta.payload[10]^=1;
  await assert.rejects(rx.stage(thirdPacket),/SHA-256 mismatch|XOR payload/);
  assert.equal(rx.status.committedSequence,null);

@@ -126,9 +126,9 @@ try{
     if(committed?.frameId!==p.sam.frameId||
        committed.step!==steps.length+1||
        root.children.length!==1||
-       root.querySelectorAll("[data-seat]").length!==2)
+       root.querySelectorAll(".sam-private-paired-seat").length!==2)
      throw Error("Incorrect atomic paired presentation");
-    const ids=[...root.querySelectorAll("[data-seat]")].map(
+    const ids=[...root.querySelectorAll(".sam-private-paired-seat")].map(
      slot=>slot.dataset.frameId);
     if(ids[0]!==committed.frameId||ids[1]!==committed.frameId)
      throw Error("Cross-seat epoch mismatch");

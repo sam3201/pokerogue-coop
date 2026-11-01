@@ -56,24 +56,53 @@ export function scanAgnosticXorFrame({before,after,tileSize=16}={}){
  const dirtyTileMask=new Uint8Array(tileColumns*tileRows);
  let changedPixels=0,changedChannelBytes=0,flippedBits=0;
  let firstChangedPixel=null;
- for(let y=0;y<height;y++){
-  const ra=y*a.strideBytes,rb=y*b.strideBytes;
-  const tileRow=(y/tileSize)|0;
-  for(let x=0;x<width;x++){
-   let changed=false;
-   for(let channel=0;channel<channels;channel++){
-    const xor=a.bytes[ra+x*channels+channel]^
-       b.bytes[rb+x*channels+channel];
-    if(xor){
-     changed=true;
-     changedChannelBytes++;
-     flippedBits+=POPCNT[xor];
-    }
-   }
-   if(changed){
+ // An aligned packed RGBA buffer permits one XOR per whole pixel. This is
+ // independent of host byte order: counts and zero/nonzero byte detection
+ // are symmetric under every permutation of the four byte lanes.
+ const packedRgba=channels===4&&
+   a.strideBytes===width*4&&b.strideBytes===width*4&&
+   a.bytes.byteOffset%4===0&&b.bytes.byteOffset%4===0;
+ const wa=packedRgba?new Uint32Array(a.bytes.buffer,
+   a.bytes.byteOffset,width*height):null;
+ const wb=packedRgba?new Uint32Array(b.bytes.buffer,
+   b.bytes.byteOffset,width*height):null;
+ if(packedRgba){
+  for(let y=0;y<height;y++){
+   const row=y*width,tileRow=(y/tileSize)|0;
+   for(let x=0;x<width;x++){
+    const xor=(wa[row+x]^wb[row+x])>>>0;
+    if(xor===0)continue;
     changedPixels++;
     if(firstChangedPixel===null)firstChangedPixel={x,y};
+    const b0=xor&255,b1=(xor>>>8)&255,
+      b2=(xor>>>16)&255,b3=(xor>>>24)&255;
+    changedChannelBytes+=(b0!==0)+(b1!==0)+(b2!==0)+(b3!==0);
+    flippedBits+=POPCNT[b0]+POPCNT[b1]+POPCNT[b2]+POPCNT[b3];
     dirtyTileMask[tileRow*tileColumns+((x/tileSize)|0)]=1;
+   }
+  }
+ }else{
+  // General route supports packed RGB, greyscale, byte-offset views and
+  // padded rows without interpreting data as a particular host format.
+  for(let y=0;y<height;y++){
+   const ra=y*a.strideBytes,rb=y*b.strideBytes;
+   const tileRow=(y/tileSize)|0;
+   for(let x=0;x<width;x++){
+    let changed=false;
+    for(let channel=0;channel<channels;channel++){
+     const xor=a.bytes[ra+x*channels+channel]^
+       b.bytes[rb+x*channels+channel];
+     if(xor){
+      changed=true;
+      changedChannelBytes++;
+      flippedBits+=POPCNT[xor];
+     }
+    }
+    if(changed){
+     changedPixels++;
+     if(firstChangedPixel===null)firstChangedPixel={x,y};
+     dirtyTileMask[tileRow*tileColumns+((x/tileSize)|0)]=1;
+    }
    }
   }
  }
@@ -82,6 +111,7 @@ export function scanAgnosticXorFrame({before,after,tileSize=16}={}){
  return {
   schema:XOR_SCHEMA,scope:"private-diagnostic-only",
   width,height,channels,tileSize,tileColumns,tileRows,
+  scanMode:packedRgba?"packed-rgba-word32":"bytewise-fallback",
   pixelsScanned:width*height,bytesCompared:width*height*channels,
   identicalPixels:changedPixels===0,
   changedPixels,changedChannelBytes,flippedBits,

@@ -6,7 +6,7 @@ import {verifyThenFetchScenePair} from "./browser_scene_pair_verify_v1.mjs";
 const LIMIT_PAIRS=4,LIMIT_BYTES=32*1024*1024;
 export class VerifiedPairCursor{
  #verifier;#queued=[];#runId=null;#latestSeq=0;
- #current=null;#ordinal=0;#bytes=0;#pending=false;
+ #current=null;#ordinal=0;#bytes=0;#pending=false;#admissionId=0;
  constructor({verifier=verifyThenFetchScenePair}={}){
   if(typeof verifier!=="function")throw Error("Verifier required");
   this.#verifier=verifier;
@@ -65,17 +65,22 @@ export class VerifiedPairCursor{
    const admitted=this.#snapshot(pair);
    this.#runId=admitted.runId;
    this.#latestSeq=admitted.sequence;
-   this.#queued.push({pair:admitted,bytes});
+   // Monotonic for this cursor instance, even across resets.
+   if(!Number.isSafeInteger(this.#admissionId+1))
+     throw Error("Admission counter exhausted");
+   this.#queued.push({pair:admitted,bytes,id:++this.#admissionId});
    this.#bytes+=bytes;
    return this.status;
   }finally{this.#pending=false;}
  }
  nextReady(){
-  return this.#queued.length?this.#snapshot(this.#queued[0].pair):null;
- }
- commitNext(frameId){
   const top=this.#queued[0];
-  if(!top||top.pair.frameId!==frameId)
+  return top?{...this.#snapshot(top.pair),admissionId:top.id}:null;
+ }
+ commitNext(frameId,admissionId=undefined){
+  const top=this.#queued[0];
+  if(!top||top.pair.frameId!==frameId||
+     (admissionId!==undefined&&top.id!==admissionId))
     throw Error("Missing or stale paired commit");
   const expectedOrdinal=this.#ordinal+1;
   const previous=this.#current;

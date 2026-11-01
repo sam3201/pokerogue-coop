@@ -6,7 +6,7 @@
 set -euo pipefail
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
-mode="$1"
+mode="${1:---plan}"
 [[ "$#" -eq 1 ]] || { echo "Usage: $0 --plan|--apply|--verify"; exit 64; }
 case "$mode" in --plan|--apply|--verify) ;; *) exit 64 ;; esac
 here="$(cd "$(dirname "$0")" && pwd -P)"

@@ -61,6 +61,7 @@ jobs:
             test_real_pair_witness_v1.mjs test_paired_frame_cursor_v1.mjs \
             test_agnostic_xor_frame_diagnostics_v1.mjs \
             test_agnostic_xor_byte_delta_v1.mjs \
+            test_trusted_paired_delta_chain_v1.mjs \
             test_private_epoch_capture_contract_v1.mjs \
             test_owner_postrender_bridge_v1.mjs test_owner_epoch_seal_v1.mjs \
             test_relay_checkpoint_gate_v1.mjs \

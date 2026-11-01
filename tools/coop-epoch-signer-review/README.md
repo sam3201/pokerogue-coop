@@ -332,11 +332,60 @@ key does not provide authority over production frames or game artwork.
 It must not be merged, deployed or used to bypass Pi provisioning,
 concurrent game workers or the existing public PNG/SSE viewer.
 
+## Cross-layer atomic frame transactions and fault rollback
+
+`paired_delta_transaction_controller_v1.mjs` coordinates the trusted
+signed byte receiver, `VerifiedPairCursor`, and detached
+`PairedFramePresenter`. Verification is single-flight, and a
+second uncommitted frame cannot enter the queue. After **both seats**
+have been rendered offscreen, a single synchronous manual Next press
+commits the visible two-seat pane and then advances the signed XOR
+baseline. Renderer preparation failures and explicit pre-press
+cancellation now discard the one pending cursor/receiver admission
+without blanking or modifying the previously committed visible pair.
+
+`VerifiedPairCursor.discardPending(frameId, admissionId)` removes
+exactly one staged, uncommitted frame while preserving its prior
+committed run/sequence and the monotonically increasing admission
+high-watermark. `PairedFramePresenter.cancelPrepared()` drops only
+the detached prepared pane. The cursor's memory admission budget
+also includes actual decoded signed seat pixel arrays, rather than
+counting only approved texture blobs.
+
+If an unexpected receiver failure occurs **after** the presenter
+accepts a frame, it would be unsafe to continue with a visible pane
+ahead of the cryptographic baseline. The controller deliberately
+blanks/resets the display, enters a poisoned fail-closed state, and
+requires an owner-authorized **fresh run ID plus signed keyframe**.
+No silent same-run recovery or frame skipping is allowed. Recovery
+does not prove the device actually painted that frame, nor does it
+authorize a game source.
+
+`run_coordinated_paired_delta_chromium_v1.mjs` exercises this in
+real Chromium using disposable Ed25519 test keys and generated
+two-seat RGBA images: one-seat renderer failure, manual cancellation,
+valid atomic commits, signature/replay checks, deliberate
+post-viewer-commit receiver failure, fail-closed blanking, and
+new-run keyframe recovery. Separate Node regressions cover cursor
+discard identity, next-sequence retry, replay safety, signed frame
+memory budgeting, and incorrect byte types.
+
+**Pi observations (read-only, November 1, 2026, around 07:00 EST):**
+the four `sam-coop-*` service user identities now exist, and
+`/var/lib/sam-coop-signer` is present as a 0700 directory owned
+by the signer account. The production signer key at
+`/var/lib/sam-coop-signer/owner-ed25519.pk8` and systemd unit
+`/etc/systemd/system/sam-coop-owner-signer.service` were absent;
+other expected capture/socket locations were also absent.
+These partial provisioning observations do **not** pass the
+production security preflight. No privileged actions were attempted
+by this review branch.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the
    running writer's untracked source or seize its lock.
-2. Real separate-UID service provisioning, root-controlled immutable install,
+2. Complete/verify the now-partial Pi UID provisioning, root-controlled immutable install,
    owner-only signing key, authenticated peer sockets, key rotation and
    rollback. CI's numeric identities and keys are disposable fixtures.
 3. Owner-controlled relay integration and genuine room-to-run enrollment.

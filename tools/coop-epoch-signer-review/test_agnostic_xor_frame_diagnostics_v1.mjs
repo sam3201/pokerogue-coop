@@ -149,3 +149,25 @@ test("cross-run, gap, repeated admission and pending replay fail closed",()=>{
  t.reset();
  assert.equal(t.status.committedFrameId,null);
 });
+
+test("aligned word32 and unaligned bytewise XOR paths are exactly equivalent",()=>{
+ const width=35,height=19,n=width*height*4;
+ const before=Uint8Array.from({length:n},(_,i)=>(i*53+19)&255);
+ const after=new Uint8Array(before);
+ for(let i=0;i<after.length;i+=41)after[i]^=(i&7)+1;
+ const aligned=scanAgnosticXorFrame({
+  before:{data:before,width,height},
+  after:{data:after,width,height},tileSize:8});
+ assert.equal(aligned.scanMode,"packed-rgba-word32");
+ const left=new Uint8Array(n+1),right=new Uint8Array(n+1);
+ left.set(before,1);right.set(after,1);
+ const unaligned=scanAgnosticXorFrame({
+  before:{data:left.subarray(1),width,height},
+  after:{data:right.subarray(1),width,height},tileSize:8});
+ assert.equal(unaligned.scanMode,"bytewise-fallback");
+ for(const field of ["changedPixels","changedChannelBytes",
+  "flippedBits","dirtyTileCount","identicalPixels"])
+  assert.equal(aligned[field],unaligned[field],field);
+ assert.deepEqual(aligned.firstChangedPixel,unaligned.firstChangedPixel);
+ assert.deepEqual([...aligned.dirtyTileMask],[...unaligned.dirtyTileMask]);
+});

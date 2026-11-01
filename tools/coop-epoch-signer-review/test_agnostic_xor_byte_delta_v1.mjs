@@ -4,7 +4,9 @@ import {createHash,randomBytes} from "node:crypto";
 import {encodeAgnosticXorDelta,decodeAgnosticXorDelta,
  summarizeAgnosticXorDelta,BYTE_DELTA_SCHEMA}
  from "./agnostic_xor_byte_delta_v1.mjs";
-const sha=bytes=>createHash("sha256").update(bytes).digest("hex");
+const asBytes=x=>x instanceof ArrayBuffer?new Uint8Array(x):
+ ArrayBuffer.isView(x)?new Uint8Array(x.buffer,x.byteOffset,x.byteLength):x;
+const sha=x=>createHash("sha256").update(asBytes(x)).digest("hex");
 const bytes=x=>new Uint8Array(x);
 async function roundtrip(a,b){
  const packet=await encodeAgnosticXorDelta({before:a,after:b});
@@ -125,10 +127,6 @@ test("malformed, zero, out-of-bounds, truncated and overlapping XOR runs reject"
  await fix(mod(4,0)); // zero length
  await fix(mod(0,255)); // changed offset
  await fix(mod(8,0)); // zero xor
- const overlap=new Uint8Array(p.payload);
- // Second run starts at 27; move it backward to overlap first.
- overlap[9]=0;overlap[10]=0;overlap[11]=0;
- overlap[9]=overlap[9]; // ensure opaque bytes are not trusted by position
  // Tamper a packet shape as well.
  await assert.rejects(decodeAgnosticXorDelta({before:a,
   packet:{...p,unknown:"private"},trustedBaseSha256:sha(a),

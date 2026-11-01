@@ -78,6 +78,36 @@ browser-renderer production readiness. The synthetic fixtures and all
 temporary keys are deleted after the CI run. Production accounts and
 service files remain unprovisioned on the Pi.
 
+## Independent two-seat Chromium postrender check
+
+Hosted CI now launches two real headless Chromium tabs displaying **generated
+canvas imagery**, using a self-contained synthetic Phaser-like loop and the
+isolated `owner_postrender_bridge_v1.mjs` capture adapter.
+
+- Both tabs acquire a unique browser-side postrender lease, freeze their own
+  render loops, capture a bounded sprite scene and PNG, and independently
+  verify the lease token and exact render tick **after screenshot completion**.
+- The synthetic two-seat private epoch diagnostic contains hashes for both
+  PNGs and scenes and a stable mock logical checkpoint before and after
+  capture. It is explicitly not a relay-issued signed checkpoint.
+- Both tabs always resume, including after one tab's forced screenshot
+  exception; the coordinator awaits both seat cleanup paths.
+- If a separate script advances a frozen tick after screenshot but before
+  lease verification, the corresponding seat rejects with a lease error,
+  the pair fails closed and both loops are resumed.
+
+The CI fixture measures correct synthetic capture behavior, **not** real
+gameplay fidelity, synchronized browser frame numbers, authenticated relay
+provenance, 30 FPS production performance, or permission to distribute game
+textures. Different tabs can have different render ticks while holding the
+same logical checkpoint; that is intentional and does not prove a common
+physical render instant. The reviewed helper still sets
+`sceneEpochAttested:false` and `productionSceneEligible:false`.
+
+The expanded in-memory scene/transport suite contains **182/182 passing**
+Node tests. The dedicated Chromium smoke test additionally verifies the
+real browser lifecycle and explicit frame-tick tamper rejection.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the

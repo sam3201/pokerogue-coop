@@ -144,17 +144,26 @@ try{
   return buffer;
  };
  let tickChangeDenied=false;
+ let tickChangeSeatError=null;
  try{
   await preparePrivateEpoch({
    runId,sequence:902,
    readRelayCheckpoint:async()=>({runId,relayCommitHash,gameStateHash}),
-   captureSeat:(seat,ctx)=>capturePostrenderSeat({
-    page:pages[seat],seat,relayCommitHash:ctx.relayCommitHash,
-    captureSource:source,timeoutMs:9000
-   })
+   captureSeat:async(seat,ctx)=>{
+    try{
+     return await capturePostrenderSeat({
+      page:pages[seat],seat,relayCommitHash:ctx.relayCommitHash,
+      captureSource:source,timeoutMs:9000
+     });
+    }catch(e){
+     if(seat==="sam")tickChangeSeatError=String(e);
+     throw e;
+    }
+   }
   });
  }catch(e){
-  tickChangeDenied=/lease changed/.test(String(e));
+  tickChangeDenied=/one or both seat captures failed/.test(String(e))&&
+    /lease changed/.test(tickChangeSeatError||"");
  }
  pages.sam.screenshot=originalSamScreenshot;
  const unfrozenAfterTick=await Promise.all(Object.values(pages).map(page=>

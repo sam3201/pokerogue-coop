@@ -232,6 +232,59 @@ Sample size and runner scheduling make the differences descriptive
 rather than a robust performance guarantee. The rAF callback happens
 before actual paint. Real gameplay remains unverified.
 
+## General-purpose XOR byte deltas — format-independent transport experiment
+
+`agnostic_xor_byte_delta_v1.mjs` applies the XOR primitive to **any bounded
+byte sequence**, not just RGBA pixels. An explicit serializer determines how
+structured game state or other values become bytes; this codec never attempts
+to infer the semantics of those values. It accepts copied non-shared
+ArrayBuffer/typed-array/DataView/Buffer inputs (0–4 MiB), finds contiguous
+nonzero XOR differences, and emits a binary run payload of little-endian
+offset+length pairs followed by XOR bytes. Unchanged regions require no
+payload. Dense, fragmented, empty or length-changing updates use an exact
+full-copy fallback instead of forcing a larger or ambiguous delta.
+
+A decoder verifies independently authenticated **baseline and target SHA-256
+digests** supplied by its caller, requires strict packet dimensions and
+canonical nonoverlapping run order, reconstructs the full byte sequence,
+and verifies the complete target hash before returning bytes. The packet's
+own digest declarations are untrusted. An authenticated producer must
+bind the externally trusted hashes to run/seat/sequence (and handle replay,
+recovery and keyframes). Calling the decoder with packet-provided hashes
+as its supposed trusted digests would defeat the security boundary.
+
+`test_agnostic_xor_byte_delta_v1.mjs` covers byte-format interoperability
+including JSON and telemetry, length changes, sparse/dense input, zero
+payloads, adversarial run headers, tampering, unsupported shared buffers,
+memory bounds and 250 deterministic randomized round trips. This adds
+12 tests to the focused Node suite, bringing it to **205/205 passing**.
+
+`run_agnostic_xor_byte_delta_benchmark_v1.mjs` generates 48 successive
+320×180 RGBA frames **per seat**, each with a moving 16×16 sprite, and
+proves 94 exact baseline→target reconstructions. In a passing hosted
+runner (run #147), 21,657,600 original uncompressed frame bytes became
+153,720 binary delta payload bytes: **99.29% fewer payload bytes** in
+this sparse synthetic scenario. Median encode/decode times were
+approximately 0.65/0.46 ms. Packet envelopes, authentication metadata,
+network transport, memory allocation and real game capture costs are
+not represented in that payload-only comparison. Dense updates can have
+**no** byte savings because the codec intentionally falls back to full.
+
+`run_signed_agnostic_delta_chromium_v1.mjs` independently proves the
+portable decode path in **real Chromium**: it verifies a disposable
+Ed25519 signature over run, seat, sequence, frame ID, baseline digest
+and target digest, reconstructs both seats' 320×180 byte buffers, checks
+actual pixels and atomically advances a two-seat viewer 0→1→2.
+Signature forgery, crossed seat claims and tampered XOR payloads all
+fail closed before display. The disposable key is not a production
+relay key, and no true game frame, private room token, live network
+compression or production provenance is involved.
+
+Both the pixel XOR scanner and generic byte delta remain **optional
+review-only experiments**, not an authorization, synchronization source
+or permission to redistribute textures. A real producer/receiver
+integration and live-device benchmark are still separate release gates.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the

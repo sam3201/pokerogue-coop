@@ -92,6 +92,13 @@ export class PairedFramePresenter {
     sequence:accepted.sequence,runId:accepted.runId,
     previousFrameId:accepted.previousFrameId});
  }
+ // Forget a detached but not-yet-presented pane without changing
+ // the current visible DOM. The coordinator discards its paired cursor
+ // and receiver admissions separately, then may safely restage.
+ cancelPrepared(){
+  this.#prepared=null;
+  return this.status;
+ }
  reset(){
   this.#cursor.reset(); // A pending verification correctly blocks reset.
   this.#prepared=null;

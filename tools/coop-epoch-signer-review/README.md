@@ -148,6 +148,39 @@ signing key is *not* a production relay key, visual textures are generated
 sample bytes, no real game/Phaser frame accuracy or steady 30 FPS throughput
 has been benchmarked, and the public viewer was not modified.
 
+## Verified texture-to-canvas drawing and synthetic timing diagnostic
+
+`verified_canvas_pair_renderer_v1.mjs` bridges a browser-verified, detached
+scene/texture pair to the existing `PhaserSpriteCanvas` compositor. It
+decodes **only previously verified approved PNG byte arrays** into in-memory
+bitmaps, creates independent detached 320x180 or 640x360 canvases for SAM
+and JevBot, and refuses absent textures, unsupported draw protocols and
+stale admission identities. Browser presentation remains synchronous and
+atomic on the manual Next press; renderer preparation never replaces the
+visible DOM. It does not assert a real game capture's completeness.
+
+`run_verified_atomic_browser_pipeline_v1.mjs` now tests **actual decoded
+fixture pixels** rather than placeholder canvas colors. The generated
+1x1 RGBA test texture produces an exact expected [22,48,91,255] pixel
+on both 320x180 canvases after signature verification and approved PNG
+fetching. Both seats are prepared before the parent pane is swapped.
+
+`run_synthetic_verified_frame_benchmark_v1.mjs` is a reproducible
+hosted-CI-only throughput diagnostic for 48 consecutive, signed synthetic
+scene pairs, 48 sprite draws **per seat per frame**, one SHA-256-approved
+generated PNG fetch per pair, verification, decoding, compositing, atomic
+presentation and an animation-frame callback after each commit. Its
+measured medians and p95 are included in the CI log, but **not enforced
+as a production performance threshold** because hosted runner CPU/GPU,
+headless Chromium, mock network and original-game capture load differ
+substantially from the Pi and real browser clients.
+
+The callback measured by `requestAnimationFrame` occurs **before** the
+browser paint; therefore the timing is labeled `totalToRaf`, not
+physical display latency. Real frame presentation frequency, framebuffer
+pixel parity, dynamic effects and sustained 30 FPS on the live game remain
+independent unpassed acceptance gates.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the

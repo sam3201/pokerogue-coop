@@ -92,5 +92,40 @@ class OwnerIsolationPreflightTests(unittest.TestCase):
             self.assertFalse(preflight.relay_identity_gate()[0])
 
 
+    def test_10_root_controlled_ancestors_rejects_writable_parent(self):
+        import stat
+        from types import SimpleNamespace as S
+        from unittest.mock import patch
+        import preflight_owner_isolation_v1 as preflight
+
+        safe = S(st_uid=0, st_mode=stat.S_IFDIR | 0o755)
+        unsafe = S(st_uid=0, st_mode=stat.S_IFDIR | 0o775)
+        path = "/etc/sam-agi/owner-signer.env"
+        with patch.object(preflight.os, "lstat", return_value=safe):
+            self.assertTrue(preflight.root_controlled_ancestors(path))
+        with patch.object(
+            preflight.os, "lstat",
+            side_effect=lambda p: unsafe if str(p) == "/etc/sam-agi" else safe
+        ):
+            self.assertFalse(preflight.root_controlled_ancestors(path))
+
+    def test_11_root_controlled_ancestors_rejects_symlinked_parent(self):
+        import stat
+        from types import SimpleNamespace as S
+        from unittest.mock import patch
+        import preflight_owner_isolation_v1 as preflight
+
+        safe = S(st_uid=0, st_mode=stat.S_IFDIR | 0o755)
+        link = S(st_uid=0, st_mode=stat.S_IFLNK | 0o777)
+        path = "/etc/systemd/system/sam-coop-owner-signer.service"
+        with patch.object(
+            preflight.os, "lstat",
+            side_effect=lambda p: link if str(p) == "/etc/systemd" else safe
+        ):
+            self.assertFalse(preflight.root_controlled_ancestors(path))
+        self.assertFalse(preflight.root_controlled_ancestors("relative/config"))
+
+
+
 if __name__ == "__main__":
     unittest.main()

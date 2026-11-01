@@ -105,11 +105,12 @@ export class TrustedPairedByteDeltaReceiver{
   if(first&&(delta.mode!=="full"||delta.baseLength!==0))
    throw Error("Initial keyframe must contain an independently signed full snapshot");
   const baseline=first?new Uint8Array(0):previous.pixels[seat];
-  return decodeAgnosticXorDelta({
+  const bytes=await decodeAgnosticXorDelta({
    before:baseline,packet:delta,
    trustedBaseSha256:s.baseSha256,
    trustedTargetSha256:s.targetSha256
   });
+  return {bytes,targetSha256:s.targetSha256};
  }
  // stage is single-flight and no future frame may be verified against an
  // uncommitted baseline. Errors never change the last accepted snapshot.
@@ -130,16 +131,17 @@ export class TrustedPairedByteDeltaReceiver{
    const admissionId=this.#nextAdmission++;
    if(!Number.isSafeInteger(admissionId)||!Number.isSafeInteger(this.#nextAdmission))
     throw Error("Paired byte admission counter exhausted");
-   const digests={sam:sam.statement.targetSha256,
-    jevbot:jevbot.statement.targetSha256};
+   // These digests came from signed, locally snapshotted statements,
+   // not from caller-owned objects that could mutate during an await.
+   const digests={sam:a.targetSha256,jevbot:b.targetSha256};
    this.#pending={runId:this.#runId,sequence,frameId,admissionId,
-    pixels:{sam:new Uint8Array(a),jevbot:new Uint8Array(b)},digests};
+    pixels:{sam:new Uint8Array(a.bytes),jevbot:new Uint8Array(b.bytes)},digests};
    // The paired scene cursor copies all seat byte data at admission.
    // A dummy 1-byte texture is private protocol plumbing, NOT a license
    // declaration or actual texture; no network fetch is performed.
    return {scope:SCOPE,runId:this.#runId,sequence,frameId,
     admissionId,seats:{
-     sam:{pixels:new Uint8Array(a)},jevbot:{pixels:new Uint8Array(b)}},
+     sam:{pixels:new Uint8Array(a.bytes)},jevbot:{pixels:new Uint8Array(b.bytes)}},
     textures:new Map([["synthetic-signed-byte-frame",new Uint8Array([1])]])};
   }finally{this.#busy=false;}
  }

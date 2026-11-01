@@ -44,7 +44,7 @@ function scene(frame,seat){
   visualScope:"partial-original-sprites",labOnly:false,
   camera:{width:1920,height:1080,x:0,y:0,scrollX:0,scrollY:0,zoom:1},
   commands:[{op:"sprite",texture:href,
-   src:[0,0,1,1],dst:[0,0,1,1],
+   src:[0,0,1,1],dst:[0,0,64,64],
    matrix:[1,0,0,1,frame,seat==="sam"?0:1],
    alpha:1,flipX:false,flipY:false,scroll:[1,1]}],
   coverage:{inspected:1,captured:1,skipped:{},
@@ -62,7 +62,8 @@ function signedPair(frame){
 }
 const allowed=new Set([
  "paired_frame_cursor_v1.mjs","paired_frame_presenter_v1.mjs",
- "browser_scene_pair_verify_v1.mjs","browser_asset_verify_v1.mjs"
+ "browser_scene_pair_verify_v1.mjs","browser_asset_verify_v1.mjs",
+ "verified_canvas_pair_renderer_v1.mjs","phaser_sprite_canvas.mjs"
 ]);
 let browser;
 try{
@@ -93,24 +94,20 @@ try{
  const page=await ctx.newPage();
  await page.goto(origin+"/",{waitUntil:"load"});
  await page.evaluate(async()=>{
-  const [{VerifiedPairCursor},{PairedFramePresenter}]=await Promise.all([
+  const [{VerifiedPairCursor},{PairedFramePresenter},
+    {PrivateVerifiedCanvasRenderer}]=await Promise.all([
    import("/review/paired_frame_cursor_v1.mjs"),
-   import("/review/paired_frame_presenter_v1.mjs")]);
+   import("/review/paired_frame_presenter_v1.mjs"),
+   import("/review/verified_canvas_pair_renderer_v1.mjs")]);
   const cursor=new VerifiedPairCursor(); // REAL WebCrypto verifier
   const root=document.getElementById("pair-root");
+  const renderer=new PrivateVerifiedCanvasRenderer({document});
   const renders=[];
   const view=new PairedFramePresenter({
-   root,cursor,renderSeat:({seat,scene,textures,frameId})=>{
-    if(textures.size!==1)throw Error("Unverified textures missing");
-    const c=document.createElement("canvas");
-    c.width=64;c.height=32;c.dataset.frameId=frameId;
-    c.dataset.seat=seat;
-    c.dataset.sequence=String(scene.commands[0].matrix[4]);
-    const g=c.getContext("2d");
-    g.fillStyle=seat==="sam"?"rgb(10,70,120)":"rgb(90,10,120)";
-    g.fillRect(0,0,c.width,c.height);
-    renders.push({seat,frameId});
-    return c;
+   root,cursor,renderSeat:args=>{
+    const node=renderer.renderSeat(args);
+    renders.push({seat:args.seat,frameId:args.frameId});
+    return node;
    }
   });
   const mutations=[];
@@ -123,8 +120,9 @@ try{
     const copy={...input,pinnedSpki:new Uint8Array(input.pinnedSpki),
       origin:location.origin};
     await cursor.stage(copy);
+    await renderer.prepare(cursor.nextReady());
     // Late malicious modification of the verifier's input cannot corrupt
-    // already-admitted scene/texture data.
+    // already-admitted scene/texture data or canvas pixels.
     input.sam.scene.commands[0].matrix[4]=999;
     return view.prepareNext();
    },
@@ -135,7 +133,10 @@ try{
       seats:pane?[...pane.children].map(n=>({
        seat:n.dataset.seat,frameId:n.dataset.frameId,
        canvasFrameId:n.firstElementChild.dataset.frameId,
-       sequence:Number(n.firstElementChild.dataset.sequence)
+       sequence:Number(n.firstElementChild.dataset.sequence),
+       width:n.firstElementChild.width,height:n.firstElementChild.height,
+       sample:[...n.firstElementChild.getContext("2d")
+        .getImageData(5,5,1,1).data]
       })):[],
       renders,mutations};
    }
@@ -160,6 +161,10 @@ try{
  assert.equal(s.frameId,runId+":9");
  assert.deepEqual(s.seats.map(x=>x.frameId),[s.frameId,s.frameId]);
  assert.deepEqual(s.seats.map(x=>x.sequence),[9,9]);
+ assert.deepEqual(s.seats.map(x=>x.sample),[
+  [22,48,91,255],[22,48,91,255]]);
+ assert.deepEqual(s.seats.map(x=>[x.width,x.height]),[
+  [320,180],[320,180]]);
  assert.deepEqual(s.mutations,[{added:1,removed:0}]);
  const secondWrong=signedPair(10);
  secondWrong.jevbot.sequence=11;
@@ -172,12 +177,15 @@ try{
  assert.equal(s.step,2);assert.equal(s.frameId,runId+":10");
  assert.deepEqual(s.seats.map(x=>x.frameId),[s.frameId,s.frameId]);
  assert.deepEqual(s.seats.map(x=>x.sequence),[10,10]);
+ assert.deepEqual(s.seats.map(x=>x.sample),[
+  [22,48,91,255],[22,48,91,255]]);
  assert.deepEqual(s.mutations[1],{added:1,removed:1});
  assert.equal(unknownRequests,0);
  console.log("SIGNED_TO_ATOMIC_BROWSER_PAIR_OK",JSON.stringify({
   verifiedPairs:2,manualSteps:2,textureFetches:pngFetches,
   totalSeatRenders:s.renders.length,atomicSwaps:s.mutations.length,
   invalidSignatureDenied:true,mismatchedSeatDenied:true,
+  verifiedSpritePixels:true,renderedSize:"320x180",
   realGameplaySource:false,productionSceneEligible:false
  }));
  await ctx.close();

@@ -57,6 +57,27 @@ The review broker retains spent run IDs for its process lifetime and has
 a dedicated negative regression test. This code is NOT applied to the
 currently active relay.
 
+## Full cross-UID enrollment test (disposable Linux)
+
+`test_three_principal_room_enrollment_v1.py` runs **four distinct numeric
+UIDs** in a temporary CI filesystem: relay (real Node broker and Python
+SO_PEERCRED gateway), capture coordinator (Node enrollment client), signer
+(real one-use Python Ed25519 entrypoint) and an unauthorized outsider.
+The gateway and signer IPC use separate group-reachable sockets; the relay's
+Node broker socket remains mode 0600 behind a 0700 private directory.
+
+This test verifies trusted code-copy checksums, root-managed executable
+copies, Unix socket ownership/permissions, outsider denial despite shared
+IPC-group access, capture access denial to the private backend, rejection of
+a wrong host token, successful one-time signed room authorization, a
+diagnostic two-seat checkpoint match, signer exit and signer-socket cleanup.
+
+Passing this test is **not** production key custody, a running live game
+relay, capture-worker provenance, a same-postrender scene/PNG pair, or
+browser-renderer production readiness. The synthetic fixtures and all
+temporary keys are deleted after the CI run. Production accounts and
+service files remain unprovisioned on the Pi.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the

@@ -154,11 +154,11 @@ test("returned receipt is deeply immutable and cannot corrupt the rolling proof"
 
 test("parsing assumptions remain aligned with the actual game transport",async()=>{
  const {readFileSync}=await import("node:fs");
- const reliable=readFileSync(new URL("../../../src/coop/transport/reliable.ts",
+ const reliable=readFileSync(new URL("../../src/coop/transport/reliable.ts",
    import.meta.url),"utf8");
- const protocol=readFileSync(new URL("../../../src/coop/protocol.ts",
+ const protocol=readFileSync(new URL("../../src/coop/protocol.ts",
    import.meta.url),"utf8");
- const kinds=readFileSync(new URL("../../../src/coop/checkpoint-log.ts",
+ const kinds=readFileSync(new URL("../../src/coop/checkpoint-log.ts",
    import.meta.url),"utf8");
  assert.match(reliable,/JSON\.stringify\(\{\s*n,\s*b:\s*message\s*\}\)/);
  assert.match(reliable,/"n"\]\s*\)\s*&&\s*"b"\s+in\s+frame/);

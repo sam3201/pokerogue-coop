@@ -108,6 +108,46 @@ The expanded in-memory scene/transport suite contains **182/182 passing**
 Node tests. The dedicated Chromium smoke test additionally verifies the
 real browser lifecycle and explicit frame-tick tamper rejection.
 
+## Atomic paired-frame browser presenter — manual Next, not delayed async paint
+
+`VerifiedPairCursor` accepts only verified, consecutive same-run pairs, and
+stages **detached copies** of scene objects and texture bytes. Future caller
+mutation cannot retroactively corrupt an admitted pair. An admission counter
+is monotonic across resets so a stale prepared pane cannot be replayed even
+when the same run/frame identity is restaged.
+
+`PairedFramePresenter` builds both seat panes detached from the visible DOM.
+The manual Next press synchronously swaps one complete parent containing
+both seats in a **single** `replaceChildren` operation, then accepts the
+matching cursor admission. If no fully built pair is ready, pressing Next
+does not advance or blank the view. Failure during preparation leaves the
+prior visible pair unchanged; a failed cursor acceptance restores the
+prior pane. These are private demonstration primitives, not a deployment.
+
+Two independent real-Chromium tests run in hosted CI:
+
+- `run_atomic_paired_manual_step_v1.mjs`: synthetic cached pairs step
+  **0 -> 1 -> 2**, proving no half-pair display, no change on an extra
+  press, rejection of failed seat rendering, and replay denial after a
+  reset with identical run/frame IDs.
+- `run_verified_atomic_browser_pipeline_v1.mjs`: generates a disposable
+  Ed25519 signing key and CC0 fixture PNG, binds and signs two synthetic
+  scene pairs, verifies signatures using **browser WebCrypto**, fetches
+  only approved SHA-256 PNG bytes, pre-renders both seat canvases, and
+  atomically commits the two signed frame identities on manual presses.
+  Forged signatures or crossed/mismatched seat sequences fail **before**
+  the fetch/display state advances.
+
+Hosted CI at this checkpoint passed **183/183** synthetic Node scene/transport
+tests, both Chromium manual-frame tests, independent synthetic postrender
+freeze/unfreeze tests, V4–V6 disposable relay fixtures, combined cross-UID
+signing and relay gateway tests, and guarded provisioning checks.
+
+No production claims follow from these test fixtures: the independent
+signing key is *not* a production relay key, visual textures are generated
+sample bytes, no real game/Phaser frame accuracy or steady 30 FPS throughput
+has been benchmarked, and the public viewer was not modified.
+
 ## Release blocks remain
 
 1. Mac/Pi consolidation and concurrent gameplay ownership: do not touch the

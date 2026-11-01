@@ -16,6 +16,7 @@ const origin="https://synthetic-fps-fixture.example.test";
 const runId="12345678-1234-4123-8123-123456789abc";
 const totalFrames=48;
 const commandsPerSeat=48;
+const xorEnabled=process.env.SAM_XOR_DIAGNOSTIC==="1";
 function crc(b){
  let c=-1;for(const v of b){c^=v;for(let i=0;i<8;i++)
   c=(c>>>1)^(0xedb88320&-(c&1));}
@@ -65,7 +66,8 @@ function framePacket(sequence){
 const modules=new Set([
  "paired_frame_cursor_v1.mjs","paired_frame_presenter_v1.mjs",
  "browser_scene_pair_verify_v1.mjs","browser_asset_verify_v1.mjs",
- "phaser_sprite_canvas.mjs","verified_canvas_pair_renderer_v1.mjs"
+ "phaser_sprite_canvas.mjs","verified_canvas_pair_renderer_v1.mjs",
+ "agnostic_xor_frame_diagnostics_v1.mjs"
 ]);
 let browser,requests=0;
 try{
@@ -93,19 +95,26 @@ try{
  });
  const page=await ctx.newPage();
  await page.goto(origin+"/");
- await page.evaluate(async()=>{
+ await page.evaluate(async({xorEnabled})=>{
   const [{VerifiedPairCursor},{PairedFramePresenter},
-   {PrivateVerifiedCanvasRenderer}]=await Promise.all([
+   {PrivateVerifiedCanvasRenderer},{PrivateAgnosticXorPairTracker}]=await Promise.all([
     import("/review/paired_frame_cursor_v1.mjs"),
     import("/review/paired_frame_presenter_v1.mjs"),
-    import("/review/verified_canvas_pair_renderer_v1.mjs")]);
+    import("/review/verified_canvas_pair_renderer_v1.mjs"),
+    import("/review/agnostic_xor_frame_diagnostics_v1.mjs")]);
   const cursor=new VerifiedPairCursor();
   const renderer=new PrivateVerifiedCanvasRenderer({document});
+  const xor=xorEnabled?new PrivateAgnosticXorPairTracker({tileSize:16}):null;
   const root=document.getElementById("pair-root");
+  const seats={};
   const view=new PairedFramePresenter({
-   root,cursor,renderSeat:renderer.renderSeat
+   root,cursor,renderSeat:args=>{
+    const canvas=renderer.renderSeat(args);
+    seats[args.seat]=canvas;
+    return canvas;
+   }
   });
-  const steps=[],visible=[];
+  const steps=[],visible=[],xorReports=[];
   const time=()=>performance.now();
   const percentile=(values,fraction)=>{
    const sorted=[...values].sort((a,b)=>a-b);
@@ -117,11 +126,33 @@ try{
     await cursor.stage({...p,pinnedSpki:new Uint8Array(p.pinnedSpki),
      origin:location.origin});
     const verified=time();
-    await renderer.prepare(cursor.nextReady());
+    const admitted=cursor.nextReady();
+    await renderer.prepare(admitted);
     const rendered=time();
     if(view.prepareNext()!==true)throw Error("Frame not prepared");
     const prepared=time();
+    let xorReadMs=0,xorScanMs=0;
+    if(xor){
+     const startRead=time(),images={};
+     for(const seat of ["sam","jevbot"]){
+      const canvas=seats[seat];
+      if(!canvas||canvas.dataset.frameId!==admitted.frameId)
+       throw Error("Unprepared diagnostic canvas");
+      images[seat]={width:canvas.width,height:canvas.height,channels:4,
+       data:canvas.getContext("2d").getImageData(0,0,
+        canvas.width,canvas.height).data};
+     }
+     xorReadMs=time()-startRead;
+     const scanStart=time();
+     const witness=xor.stage({runId:admitted.runId,
+      frameId:admitted.frameId,sequence:admitted.sequence,
+      admissionId:admitted.admissionId,images});
+     xorScanMs=time()-scanStart;
+     xorReports.push(witness);
+    }
     const committed=view.pressNext();
+    if(xor)xor.commit({frameId:committed?.frameId,
+      admissionId:admitted.admissionId});
     const swapped=time();
     if(committed?.frameId!==p.sam.frameId||
        committed.step!==steps.length+1||
@@ -139,6 +170,7 @@ try{
     const nextRaf=time();
     steps.push({verifyMs:verified-start,renderMs:rendered-verified,
      prepareMs:prepared-rendered,commitMs:swapped-prepared,
+     xorReadMs,xorScanMs,
      toNextRafMs:nextRaf-swapped,totalToRafMs:nextRaf-start});
     visible.push(committed.frameId);
     return committed.step;
@@ -150,17 +182,25 @@ try{
      maximumMs:+Math.max(...steps.map(x=>x[k])).toFixed(3)
     });
     return {frames:steps.length,commandsPerSeat:48,
+     xorDiagnosticEnabled:xorEnabled,
+     xorComparisons:xorReports.filter(r=>r.baselineAvailable).length,
+     xorChangedPairs:xorReports.filter(r=>r.xor&&
+      (!r.xor.sam.identicalPixels||!r.xor.jevbot.identicalPixels)).length,
+     xorChangedPixels:xorReports.reduce((n,r)=>n+
+       (r.xor?.sam.changedPixels||0)+(r.xor?.jevbot.changedPixels||0),0),
      finalStep:cursor.status.step,visibleEpochs:visible.length,
      monotonic:visible.every((id,i)=>id.endsWith(":"+(i+1))),
      manualStage:false,productionEligible:false,
      verify:measure("verifyMs"),render:measure("renderMs"),
+     xorReadback:xorEnabled?measure("xorReadMs"):null,
+     xorScan:xorEnabled?measure("xorScanMs"):null,
      commit:measure("commitMs"),toNextRaf:measure("toNextRafMs"),
      totalToRaf:measure("totalToRafMs"),
      fractionToRafUnder33ms:+(steps.filter(x=>x.totalToRafMs<=33.333).length/
        Math.max(1,steps.length)).toFixed(3)};
    }
   };
- });
+ },{xorEnabled});
  for(let sequence=1;sequence<=totalFrames;sequence++){
   const result=await page.evaluate(packet=>window.__fpsLab.process(packet),
    framePacket(sequence));
@@ -172,6 +212,11 @@ try{
  assert.equal(metrics.visibleEpochs,totalFrames);
  assert.equal(metrics.monotonic,true);
  assert.equal(requests,totalFrames);
+ if(xorEnabled){
+  assert.equal(metrics.xorComparisons,totalFrames-1);
+  assert.ok(metrics.xorChangedPairs>0,"expected changing rendered pixels");
+  assert.ok(metrics.xorChangedPixels>0);
+ }else assert.equal(metrics.xorComparisons,0);
  console.log("SYNTHETIC_SIGNED_PAIR_FRAME_BENCH",JSON.stringify(metrics));
  console.log("HOSTED_CI_ONLY_NOT_PI_OR_LIVE_GAME");
  await ctx.close();

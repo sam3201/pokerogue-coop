@@ -82,6 +82,11 @@ jobs:
         timeout-minutes: 2
         run: |
           timeout --signal=TERM --kill-after=3s 75s node run_atomic_paired_manual_step_v1.mjs
+      - name: Verify signed scene and approved texture through atomic Chromium viewer
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 75s node run_verified_atomic_browser_pipeline_v1.mjs
       - name: Install disposable relay WebSocket dependency
         run: npm install --prefix coop-server --no-save --no-audit --no-fund --ignore-scripts --package-lock=false ws@8.22.0
       - name: Run disposable real-relay observer and private grant V4-V6 fixtures

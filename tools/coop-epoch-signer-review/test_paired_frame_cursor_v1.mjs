@@ -112,3 +112,59 @@ test("staged verified data cannot be mutated after admission or via nextReady",a
  committed.seats.jevbot.frameId="external mutation";
  assert.equal(c.status.frameId,run+":12");
 });
+
+
+test("discardPending leaves last committed pair visible and permits same sequence retry",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ await c.stage(make(1));
+ const first=c.nextReady();
+ c.commitNext(first.frameId,first.admissionId);
+ await c.stage(make(2));
+ const rejected=c.nextReady();
+ const discarded=c.discardPending(rejected.frameId,rejected.admissionId);
+ assert.equal(discarded.frameId,run+":1");
+ assert.equal(discarded.step,1);
+ assert.equal(discarded.queued,0);
+ assert.equal(discarded.stagedThrough,1);
+ assert.equal(c.nextReady(),null);
+ await c.stage(make(2));
+ const retried=c.nextReady();
+ assert.equal(retried.frameId,rejected.frameId);
+ assert.ok(retried.admissionId>rejected.admissionId);
+ assert.throws(()=>c.commitNext(retried.frameId,rejected.admissionId),/stale/);
+ c.commitNext(retried.frameId,retried.admissionId);
+ assert.equal(c.status.step,2);
+});
+test("discarding the initial uncommitted frame keeps no run pinned",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ await c.stage(make(1));
+ const ready=c.nextReady();
+ const s=c.discardPending(ready.frameId,ready.admissionId);
+ assert.equal(s.runId,null);
+ assert.equal(s.stagedThrough,0);
+ assert.equal(s.step,0);
+ await c.stage(make(1,other));
+ assert.equal(c.nextReady().frameId,other+":1");
+});
+test("discard requires exact admission and cannot drop an arbitrary queued head",async()=>{
+ const c=new VerifiedPairCursor({verifier:async x=>x});
+ await c.stage(make(5));
+ const ready=c.nextReady();
+ assert.throws(()=>c.discardPending(ready.frameId,ready.admissionId+1),/Stale/);
+ assert.throws(()=>c.discardPending(run+":999",ready.admissionId),/Stale/);
+ assert.equal(c.status.queued,1);
+ await c.stage(make(6));
+ assert.throws(()=>c.discardPending(ready.frameId,ready.admissionId),/Exactly one/);
+ assert.equal(c.status.queued,2);
+});
+test("discard is forbidden during unfinished verification",async()=>{
+ let unblock;
+ const c=new VerifiedPairCursor({verifier:()=>new Promise(resolve=>unblock=resolve)});
+ const pending=c.stage(make(1));
+ assert.throws(()=>c.discardPending(run+":1",1),/Exactly one/);
+ unblock(make(1));
+ await pending;
+ const a=c.nextReady();
+ c.discardPending(a.frameId,a.admissionId);
+ assert.equal(c.status.queued,0);
+});

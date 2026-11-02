@@ -7,7 +7,6 @@ on:
       - beta
       - release
       - 'hotfix*'
-      - qa/pr2-full-isolate-20261102
   pull_request:
     branches:
       - main

@@ -473,7 +473,7 @@ export function rewardScreen(r: LinkedRun): RewardPhase {
 export function openScreen(): { screen: number; picker: Seat; step: number } {
   const session = requireCoopSession();
   const screen = session.rewardPickCount - 1;
-  return { screen, picker: rewardPickerOf(screen), step: session.rewardStep };
+  return { screen, picker: rewardPickerOf(screen, session.rewardPriority), step: session.rewardStep };
 }
 
 /** Where a stalled test is: the phase, the screen, the turn and what is queued, for the message of the failure */

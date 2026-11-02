@@ -111,6 +111,9 @@ export class UiInputs {
       // Co-op (D16): they do something only in a linked run, on the screens where a cursor or a message is up
       [Button.COOP_PING]: () => void pingNow(),
       [Button.COOP_EMOTE]: () => void openEmoteWheel(),
+      // Co-op (D38): the chat box's key is caught on the page before the game (src/coop/chat.ts); one that comes here was
+      // typed in one of the game's own text fields, where it is a letter
+      [Button.COOP_CHAT]: () => {},
     };
     return actions;
   }
@@ -137,6 +140,7 @@ export class UiInputs {
       [Button.DEV_CUSTOM]: () => {},
       [Button.COOP_PING]: () => {},
       [Button.COOP_EMOTE]: () => {},
+      [Button.COOP_CHAT]: () => {},
     };
     return actions;
   }

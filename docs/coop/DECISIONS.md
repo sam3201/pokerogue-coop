@@ -40,7 +40,7 @@ and when. [ARCHITECTURE.md](ARCHITECTURE.md) explains how the code implements it
 | Topic | Sections |
 |---|---|
 | Connection and sync | D1 handshake, D2 sequencing, D3 determinism, D13 desyncs, D18 epochs, D24 payload validation |
-| Accounts and settings | D4 account data, D4a account writes and run end, D5 settings, D31 account import, D32 the starter select of both |
+| Accounts and settings | D4 account data, D4a account writes and run end, D5 settings, D31 account import, D32 the starter select of both, D35 play again, D36 rules kept as they are, D37 find a partner, D38 the chat box |
 | Events | D33 timed events (Halloween and the others) |
 | Battles | D6 battle shape, D7 party and control, D8 commands, D34 trainers the run has met |
 | Between waves | D9 rewards, D10 prompts, D11 trade, D28 party edits, D29 Mystery Encounters, D30 eggs and vouchers |
@@ -558,7 +558,7 @@ Mystery Encounters are on (D29), and `EggLapsePhase` runs (D30).
 - After the handshake the host sequences a `RESYNC` at once: both load the wave-start save and continue, with the epoch
   after the slot's.
 - **Continue** first checks that this build can load the slot; if it cannot, the host is told why and may delete it.
-- `COOP_PROTOCOL_VERSION` in `src/coop/protocol.ts` (7) is bumped by any incompatible change to a message shape. Two
+- `COOP_PROTOCOL_VERSION` in `src/coop/protocol.ts` (9) is bumped by any incompatible change to a message shape. Two
   builds pair only when they are the same commit anyway (D1).
 
 ## D22. Deploy shape
@@ -710,7 +710,10 @@ step; the screens would not.
   and a take over's: learn-move, biome, catch release, switch, side action), whose lines only that player sees. Lines
   on other screens (party, rewards, trade) are not counted.
 - **Host:** sends `pace {at, game, exp, hp, iv, anim, stats}`, an unsequenced `COSMETIC` state (D16 channel: latest
-  wins, at most 8 per s, burst 4), on every change and again every 2 s, so a lost one is repaired.
+  wins, at most 8 per s, burst 4). A change sends it at once, then at most once per 150 ms with the latest position (the
+  phases of a move start in bursts, and the guest looks every 250 ms anyway). It is sent again when the partner is back,
+  and after 10 s without a change, so one the relay dropped is repaired. (It was on every change and every 2 s: three
+  in five relay messages of a battle were `pace`.)
 - **The guest follows:** a shared line closes by itself once the host is past it, and while the guest is behind, its
   lines appear at once. A panel of its own (level-up stats, IVs) closes once the host is past it too, and the IV
   Scanner question (`ScanIvsPhase`) is answered no. Nothing follows on the host.
@@ -809,8 +812,9 @@ step; the screens would not.
 - **Vouchers:**
   - A voucher picked on a reward screen is applied by both clients, so both accounts get one.
   - A boss trainer's voucher (gym leaders, team bosses, Elite Four, Champion) runs the same phases on both clients,
-    whatever each account has unlocked already. Whether this account unlocks it or gets one more is decided inside the
-    phase, per client.
+    whatever each account has unlocked already: one reward phase, whose voucher is decided per client, as in solo. On
+    this account's first win it is the boss's own (Voucher Plus for a gym leader, Premium for the Elite Four and the
+    Champion) and the unlock is recorded; on a later win it is the lesser one.
   - The Winstrate Challenge's voucher goes to both accounts.
 - **The egg gacha:** open during a co-op run too, from the menu, as on the title screen. A pull takes this player's
   vouchers and adds the eggs to this account only. The eggs and their order are drawn outside the run's stream (the
@@ -905,6 +909,94 @@ the same ones again and again. A co-op run prefers the ones it has not met:
   A save of an earlier version has none. A new run starts with none.
 - **Hashed** (D13), like the timed events.
 - Solo play picks as upstream.
+
+## D35. Play again
+
+At the end of a run (a victory, or a wipe the host did not retry), each player chooses **Play again with {partner}** or
+**Back to title** on the end screen (`src/coop/play-again.ts`). A pair that wants another run does not share a new code.
+
+- **From the run's end on** (`GameOverPhase.handleCoopRunEnd`, on both clients at the same point): the session is
+  `runOver`, so the partner leaving is the end screen's to say, not "ended the session". What only a run needs stops
+  (pacing, the reconnect and resync screens, the take-over clocks, cursors and emotes); the link stays.
+- **The answers** are `LOBBY` messages on the run's link: `again` (`want`), heard from the run's end on, so an answer that
+  comes before this client's end screen asks is kept. Nothing is sequenced: the run is over.
+- **Both want to:** the host creates a new room and sends its code (`againCode`). The guest leaves the old room as soon as it
+  has the code; the host leaves it when the guest has (or after 10 s). At the title screen the host waits in the new room
+  (its code is shown, should the guest have to type it) and the guest joins it by itself. From there it is a new game: a new
+  handshake (D1), a new session, the starter select (D32).
+- **Otherwise:** a player who goes back to the title tells the partner, who reads "{partner} went back to the title"; a
+  partner who left the room reads "{partner} left the game". A room that cannot be created, or a code that does not come in
+  20 s, reads "Could not start a new game with {partner}". Each then goes to the title screen.
+- A session without a link (the rules harness) shows "Co-op run ended" for 2.5 s, as before.
+- `COOP_PROTOCOL_VERSION` is 8 since `again` and `againCode`.
+
+## D36. Rules kept as they are
+
+Settled by the owner on 2026-10-28, so they are not proposed again:
+
+- **Achievements** a run earns unlock on both accounts, whichever player's Pokémon earned them: the run is shared.
+- **Gifts** stay free whatever the counts (D11): a 5-and-1 split is the players' choice.
+- **Retries** after a wipe are not limited (D4a): the host chooses each time.
+
+## D37. Find a partner
+
+**Find a partner** (the co-op menu, after Join a game) pairs two players who share nothing, through the relay.
+
+- **The queue** is a connection of its own to the relay, `?match=<build>` (the protocol's `MatchControlMessage`). The build
+  is `hashCanonical` of the build identity, so only clients that can pair (D1) meet. Players of a build are matched in the
+  order they came: the one who waited longer hosts.
+- **Once matched** the host creates a room as usual and sends its code on the queue's connection (`match:code`); the relay
+  gives it to the other player (`relay:matchGuest`), who joins it, and closes both queue connections ("matched", 1000:
+  that close is how the host knows its code went). From there it is a new game with a code: the handshake (D1), a session,
+  the starter select (D32).
+- **A pair that breaks before the code went:** the guest goes back in the queue in its old place (`relay:matchLost`); the
+  host's queue connection is closed (4004): its room has nobody to come, so the game ends that room for good and searches
+  again ("Your partner left. Looking again…"). A host that never sends its code (a frozen tab, a modified client) cannot
+  hold anyone: after 15 s the guest says so (`match:stale`), and the relay drops a host that has had 10 s and pairs the
+  guest again. A code addressed to a guest that is leaving counts as that guest leaving.
+- **After the code:** a matched host waits 30 s for its partner to come into the room, then ends the room and searches
+  again ("Your partner did not connect"); a matched guest whose join fails searches again ("Could not reach your
+  partner") instead of the failure screen, and the join form does not keep a code it never showed. Cancel on the host's
+  waiting screen ends the room for good (as for Play again's room), so a partner on the way is told at once.
+- **On the Worker** the queue is one Durable Object (`Matchmaker`, `idFromName("queue")`) whose sockets hibernate: what
+  each player is (their build, place, partner) lives in the socket's attachment, and the keepalive (`match:ping` every
+  30 s) is answered without waking it (`setWebSocketAutoResponse`), so a queue where people only wait costs nothing. A
+  waiting socket with no keepalive for 75 s is a dead connection: it is closed instead of being paired. One address keeps
+  at most 4 queue connections (the Worker tags each socket with it, an IPv6 one as its /64). The Node relay
+  (`coop-server/src/matchmaker.ts`) keeps the same rules in memory; its heartbeat keeps a queued socket as long as it
+  answers, as a room's. Each caps the queue at 1000 players, closes a socket that sends a binary frame, and cuts off one
+  that sends more than five frames (the Node relay counts a keepalive sent less than 5 s after the last one as a frame).
+- **The client** opens the queue again by itself, at most three times, when its connection drops while it waits (a blip,
+  a relay that restarted).
+- **Where it is offered:** with the public relay of the website (a build with `VITE_COOP_RELAY_URL`) and in development. A
+  self-hosted relay (the Windows pack, Docker) has only the players who were given its address, so the entry is not there.
+- A player with a saved co-op run is asked first, as for hosting (D19): they may end up hosting.
+- The screen counts the time waited and offers Cancel; "Found a partner!" once matched. Once a role is decided, the queue's
+  news no longer writes on the screen.
+
+## D38. The chat box
+
+A small chat in every linked session (the lobby, the starter select, the run and the end screen), between the two players.
+
+- **On the wire:** `CHAT {text}`, reliable and unsequenced, outside the simulation and its epochs (a line sent just before
+  a reload still arrives). A line is at most 500 characters on the wire; `COOP_PROTOCOL_VERSION` is 9 since it.
+- **The text** (`src/coop/chat-text.ts`): a line loses control and invisible characters (bidi overrides, zero-width
+  ones), its white space is collapsed and it is cut at 120 characters. **Every line is filtered where it is shown**, the
+  partner's and this player's own, so both screens show the same: common swear words and slurs become stars (their
+  endings and look-alikes too, "sh1t", "fuuuck"; whole words only, so "class" and "Cofagrigus" stay), "kill yourself"
+  too, and links become "[link]". The filter is on in every game (settled by the owner): a partner found by Find a
+  partner is a stranger, maybe a child.
+- **The partner's name** goes through the same filter, everywhere it is shown (`partnerDisplayName`): a stranger's name can
+  hold a slur or a link too.
+- **Mute** hides the partner's lines from then on, and is remembered for the tab (`sessionStorage`, by name): a muted
+  partner stays muted after Play again or a reload. A line typed while the partner is not connected is not sent (it would
+  be lost: their next connection starts afresh, D20); a note says so. A player sends at most three lines at once, then one every 1.5 s
+  ("Slow down a little."); the receiver drops what floods past five at once and one a second.
+- **The box** (`src/coop/chat.ts`) is the page's, not the canvas's: a **Chat** button at the top right, with the count of
+  lines that came while it was closed; those lines also show under it for 6 s. The **Co-op: chat** key (H, remappable;
+  a saved keyboard mapping gets H if it is free) opens it with the cursor in the line; Enter sends, an empty Enter or Esc
+  closes. While the line has the keyboard the game gets no key (the box stops each key event before the game's listener
+  on the window). Text is written with `textContent` only. The box and what was said go with the session.
 
 ## See also
 

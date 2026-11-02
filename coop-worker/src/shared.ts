@@ -13,11 +13,14 @@ import {
   type RelayErrorReason,
   type Seat,
 } from "../../coop-server/src/relay-protocol.ts";
+import type { Matchmaker } from "./matchmaker.ts";
 import type { Room } from "./room.ts";
 
 /** What the Worker and its rooms are given (`wrangler.toml`) */
 export interface Env {
   ROOM: DurableObjectNamespace<Room>;
+  /** The matchmaking queue (D37): one object, `idFromName("queue")` */
+  MATCH: DurableObjectNamespace<Matchmaker>;
   /** Comma list of the origins whose pages may open the relay (`*`: all). Empty: only pages of the relay's own address */
   ALLOWED_ORIGINS?: string;
   /** How long a seat is kept once both players are gone */
@@ -50,6 +53,8 @@ export function envNumber(value: string | undefined, fallback: number): number {
 
 /** The header the Worker uses to tell a room what to do */
 export const ACTION_HEADER = "x-coop-action";
+/** The header the Worker uses to tell the matchmaking queue the player's address (an IPv6 one as its /64) */
+export const ADDRESS_HEADER = "x-coop-address";
 /** The header the Worker uses to tell a room its code */
 export const CODE_HEADER = "x-coop-code";
 

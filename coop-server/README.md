@@ -52,6 +52,7 @@ Connect with a WebSocket to `/coop?<query>` (the path of the relay, DECISIONS D2
 | `role=host` | create a room; the host seat is yours |
 | `code=ABC234` | join that room as guest (first free guest seat) |
 | `code=ABC234&seat=host\|guest&token=<hex>` | take your seat back after a dropped connection |
+| `match=<build>` | wait in the matchmaking queue of that build (Find a partner, DECISIONS D37); see below |
 
 The relay answers with JSON control frames (`{"t":"relay:..."}`, declared in `src/relay-protocol.ts`):
 
@@ -70,6 +71,20 @@ The relay answers with JSON control frames (`{"t":"relay:..."}`, declared in `sr
 Everything else a client sends is forwarded verbatim to the partner. Not forwarded: binary frames, frames while the
 partner is away (the clients' reliable layer resends), and any frame whose `t` starts with `relay:` (clients cannot forge
 control frames). Frames over 1 MiB close the connection (1009).
+
+### Matchmaking
+
+On a `match=<build>` connection (`<build>` is `[A-Za-z0-9._+-]{1,64}`, a hash of the game's build) the relay answers
+`relay:queued`. Two players of a build are matched in the order they came: the first gets `relay:matchHost`, creates a
+room as above and sends `{"t":"match:code","code":"ABC234"}` on this connection; the second gets `relay:matched`, then
+`relay:matchGuest {code}`, and joins that room. The relay then closes both queue connections (1000). A pair that breaks
+before the code went puts the guest back in the queue in its place (`relay:matchLost`) and closes the host's connection
+(4004: search again). A guest whose host has not sent its code may send `{"t":"match:stale"}`; a host that has had 10 s
+is then closed (4004) and the guest paired again. `{"t":"match:ping"}` is answered with `{"t":"relay:pong"}` (a
+keepalive). At most 1000 players wait at once (`relay:error busy`); a binary frame closes the connection, and a player who
+sends more than five frames (keepalives less than 5 s apart count) is cut off (1008). The rules are `src/matchmaker.ts`;
+the Worker keeps them in its `Matchmaker` Durable Object, where one address keeps at most four queue connections
+(`relay:error rateLimited`) and a waiting socket silent for 75 s is closed.
 
 ## Seats, tokens, holds
 

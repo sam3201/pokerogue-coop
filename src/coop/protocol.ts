@@ -19,10 +19,11 @@ import {
   isAccountSnapshot,
   isCoopAccountSnapshot,
 } from "#coop/account-snapshot";
+import { filterChat } from "#coop/chat-text";
 import { type CollectionData, isCollectionData } from "#coop/collection-data";
 
 /** Bumped whenever a message shape changes incompatibly. Peers with different versions refuse to connect. */
-export const COOP_PROTOCOL_VERSION = 7;
+export const COOP_PROTOCOL_VERSION = 9;
 
 /** The two players. The host is the sequencer (D2). */
 export type Seat = "host" | "guest";
@@ -143,6 +144,7 @@ export function isDecisionKey(value: unknown): value is DecisionKey {
  *   under its epoch (D13, D18), or stop (the third desync of a wave)
  * - `REPORT`: either way, after a stop: this client's phase trace and checkpoints for the report (D13)
  * - `BYE`: orderly leave
+ * - `CHAT`: either way, a line of the chat box (D38), see {@linkcode ChatPayload}; outside the simulation and its epochs
  */
 export const MESSAGE_KINDS = [
   "HELLO",
@@ -160,6 +162,7 @@ export const MESSAGE_KINDS = [
   "RESYNC",
   "REPORT",
   "BYE",
+  "CHAT",
 ] as const;
 
 export type MessageKind = (typeof MESSAGE_KINDS)[number];
@@ -289,9 +292,13 @@ export function cleanName(value: unknown): string {
   return cleaned.slice(0, MAX_NAME_LENGTH).trim() || DEFAULT_NAME;
 }
 
-/** @returns How to call the partner: their name, or with " (2)" if both players chose the same one */
+/**
+ * @returns How to call the partner: their name, or with " (2)" if both players chose the same one. A partner found by
+ * matchmaking is a stranger: their name goes through the chat's filter (D38) wherever it is shown.
+ */
 export function partnerDisplayName(mine: string, theirs: string): string {
-  return theirs === mine ? `${theirs} (2)` : theirs;
+  const shown = filterChat(theirs);
+  return shown === mine ? `${shown} (2)` : shown;
 }
 
 export interface HelloMismatch {
@@ -482,7 +489,14 @@ export type LobbyMessage =
   | { t: "ready"; starters: CoopStarter[]; cost: number; snapshot: AccountSnapshot; events: string[]; gen: number }
   | { t: "unready" }
   | { t: "reset"; gen: number }
-  | { t: "collection"; collection: CollectionData; ask: boolean };
+  | { t: "collection"; collection: CollectionData; ask: boolean }
+  /** At the end of a run (D35): whether this player wants to play again */
+  | { t: "again"; want: boolean }
+  /** Host, once both want to play again (D35): the code of the new game's room */
+  | { t: "againCode"; code: string };
+
+/** A room code as the relays draw them (`coop-server/src/relay-protocol.ts`), with room to spare */
+const AGAIN_CODE = /^[A-Z0-9]{4,12}$/;
 
 export function isLobbyMessage(value: unknown): value is LobbyMessage {
   if (typeof value !== "object" || value === null) {
@@ -508,9 +522,33 @@ export function isLobbyMessage(value: unknown): value is LobbyMessage {
       return Number.isSafeInteger(message["gen"]);
     case "collection":
       return isCollectionData(message["collection"]) && typeof message["ask"] === "boolean";
+    case "again":
+      return typeof message["want"] === "boolean";
+    case "againCode":
+      return typeof message["code"] === "string" && AGAIN_CODE.test(message["code"]);
     default:
       return false;
   }
+}
+
+/**
+ * `CHAT` payload (D38): a line of the chat box as the partner typed it. The receiver cleans and filters it before it shows it
+ * (`chat-text.ts`): this is only the bound on what crosses the wire.
+ */
+export interface ChatPayload {
+  text: string;
+}
+
+/** The longest line the wire carries (the chat box itself keeps lines shorter) */
+export const CHAT_WIRE_MAX = 500;
+
+export function isChatPayload(value: unknown): value is ChatPayload {
+  return (
+    typeof value === "object"
+    && value !== null
+    && typeof (value as { text?: unknown }).text === "string"
+    && (value as { text: string }).text.length <= CHAT_WIRE_MAX
+  );
 }
 
 /** `CHECKPOINT` payload: a state-hash checkpoint the sender passed (D13). Compared with the receiver's own. */

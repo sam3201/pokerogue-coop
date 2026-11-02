@@ -10,9 +10,12 @@
 import { timedEventManager } from "#app/global-event-manager";
 import { globalScene } from "#app/global-scene";
 import { settings } from "#app/global-settings-manager";
+import { isDev } from "#constants/app-constants";
 import { stopAllAfkWatchers } from "#coop/afk";
+import { listenForAgain } from "#coop/again-answer";
 import { coopText } from "#coop/bridge";
 import { getLocalBuildIdentity, overridesAreDefaults } from "#coop/build-info";
+import { startChat, stopChat } from "#coop/chat";
 import { attachCheckpointExchange } from "#coop/checkpoint-exchange";
 import { copyText } from "#coop/clipboard";
 import { attachCoopLog, setCoopLogServer } from "#coop/coop-diagnostics";
@@ -31,7 +34,7 @@ import {
 } from "#coop/link";
 import { startPacer, stopPacer } from "#coop/pace-run";
 import { buildPinnedSettings, createSettingsOverlayPort } from "#coop/pinned-settings";
-import { COOP_STARTER_POINTS, keyId, otherSeat, type Seat } from "#coop/protocol";
+import { COOP_STARTER_POINTS, hashCanonical, keyId, otherSeat, type Seat } from "#coop/protocol";
 import { hideReconnectScreen } from "#coop/reconnect-ui";
 import { relayUrlFor } from "#coop/relay-url";
 import { askAndReport, setReportButtonVisible } from "#coop/report-button";
@@ -41,6 +44,7 @@ import { type CoopSession, endCoopSession, getCoopSession, startCoopSession } fr
 import { CollectionExchange, captureCollection, poolCollection, unpoolCollection } from "#coop/shared-collection";
 import { StarterLobby } from "#coop/starter-lobby";
 import { setTouchEmoteVisible } from "#coop/touch-emote";
+import { findMatch, type MatchRole } from "#coop/transport/match-ws";
 import { RelayError } from "#coop/transport/relay-ws";
 import { validateProposal } from "#coop/validate";
 import { coopStore, currentCoopSlot } from "#coop/wave-save";
@@ -128,6 +132,7 @@ export function leaveCoop(): void {
   stopCoopLog?.();
   stopCoopLog = null;
   setReportButtonVisible(false);
+  stopChat();
   closeStarterLobby();
   stopCosmeticView();
   stopPacer();
@@ -163,6 +168,20 @@ export function returnToTitle(message: string | null): void {
 }
 
 registerLeaveHandler(() => returnToTitle(null));
+
+/**
+ * The run is over (D35): what only a run needs stops (the text pacing, the reconnect and resync screens, the take-over clocks,
+ * the partner's cursors and emotes), and the link stays for the end screen's "Play again"
+ */
+export function quietRunEnd(): void {
+  stopPacer();
+  stopResync?.();
+  stopResync = null;
+  hideReconnectScreen();
+  stopAllAfkWatchers();
+  stopCosmeticView();
+  setTouchEmoteVisible(false);
+}
 // A guest whose START was lost is brought into the run by the reload: its starter select's lobby and pooled collection go
 registerBeforeReload(() => closeStarterLobby());
 
@@ -260,6 +279,12 @@ function importFromTitle(callbacks: CoopTitleCallbacks): void {
   );
 }
 
+/**
+ * Size of the co-op menu: with all its rows (eight) at full size it runs off the top of the screen. At 5/6 each pixel of the
+ * window and the font is still a whole number of canvas pixels (the game draws at 6x).
+ */
+const COOP_MENU_SCALE = 5 / 6;
+
 /** "Host / Join / Cancel" */
 export function showCoopTitleMenu(callbacks: CoopTitleCallbacks): void {
   const slot = continueHandler === null ? null : currentCoopSlot();
@@ -314,6 +339,41 @@ export function showCoopTitleMenu(callbacks: CoopTitleCallbacks): void {
         return true;
       },
     },
+    ...(matchmakingAvailable()
+      ? [
+          {
+            label: coopText("findPartner", "Find a partner"),
+            handler: () => {
+              if (slot === null) {
+                void findPartner(callbacks);
+                return true;
+              }
+              // As for hosting: the player may end up hosting, and a new run takes the saved one's place (D19)
+              const { ui } = globalScene;
+              ui.showText(
+                coopText(
+                  "matchOverwrites",
+                  "A new game may replace your saved co-op run (wave {{wave}}). Find a partner anyway?",
+                  { wave: slot.wave },
+                ),
+                null,
+                () =>
+                  ui.setModeWithoutClear(UiMode.CONFIRM, {
+                    yesHandler: () => {
+                      ui.clearText();
+                      void findPartner(callbacks);
+                    },
+                    noHandler: () => {
+                      ui.clearText();
+                      showCoopTitleMenu(callbacks);
+                    },
+                  }),
+              );
+              return true;
+            },
+          },
+        ]
+      : []),
     {
       label: coopText("nameOption", "Your name: {{name}}", { name: getCoopName() }),
       handler: () => {
@@ -351,7 +411,7 @@ export function showCoopTitleMenu(callbacks: CoopTitleCallbacks): void {
       },
     },
   ];
-  const config: OptionSelectModeConfig = { options, yOffset: 48 };
+  const config: OptionSelectModeConfig = { options, yOffset: 48, scale: COOP_MENU_SCALE };
   const { ui } = globalScene;
   if (ui.mode === UiMode.OPTION_SELECT) {
     // Back from a form opened from this menu (the name, the join code): reverting the form returned to this mode, but the
@@ -372,16 +432,19 @@ export function showFailure(error: unknown, callbacks: CoopTitleCallbacks, messa
   ui.showText(message ?? describeCoopError(error), null, () => callbacks.onCancel(), null, true);
 }
 
-/** Show the join code with a cancel button while waiting for the partner. */
-export function showJoinCode(code: string, cancel: () => void): void {
+/**
+ * Show the join code with a cancel button while waiting for the partner.
+ * @param waiting - What the message says; by default, the code and that the partner is awaited
+ * @param copy - Whether "Copy code" is offered (not for a match: nobody types that code)
+ */
+export function showJoinCode(code: string, cancel: () => void, waiting?: string, copy = true): void {
   const { ui } = globalScene;
   joinCode = code;
-  const waiting = coopText("waitingForPartnerToJoin", "Your join code is {{code}}. Waiting for your partner…", {
+  waiting ??= coopText("waitingForPartnerToJoin", "Your join code is {{code}}. Waiting for your partner…", {
     code,
   });
-  ui.showText(waiting, null, () => {
-    ui.setOverlayMode(UiMode.OPTION_SELECT, {
-      options: [
+  const copyOption: OptionSelectItem[] = copy
+    ? [
         {
           // The code goes to the clipboard, and the message says whether it did; the menu stays
           label: coopText("copyCode", "Copy code"),
@@ -401,6 +464,12 @@ export function showJoinCode(code: string, cancel: () => void): void {
             return true;
           },
         },
+      ]
+    : [];
+  ui.showText(waiting, null, () => {
+    ui.setOverlayMode(UiMode.OPTION_SELECT, {
+      options: [
+        ...copyOption,
         {
           label: "Reward picker: Host / Guest / Alternate (cycle)",
           keepOpen: true,
@@ -434,8 +503,8 @@ export function showJoinCode(code: string, cancel: () => void): void {
 
 /** What a player is told when the room is over under them: the partner ended it, or the connection could not be restored */
 function sessionOver(session: CoopSession, end: "peerGone" | "closed"): void {
-  if (session.hasEnded || session.stopped !== null || getStarterLobby() !== null) {
-    return; // the starter lobby has its own way of saying so
+  if (session.hasEnded || session.runOver || session.stopped !== null || getStarterLobby() !== null) {
+    return; // the starter lobby and the end of the run have their own way of saying so
   }
   const partner = session.partnerName;
   returnToTitle(
@@ -481,6 +550,8 @@ export function beginSession(
     });
   }
   attachCheckpointExchange(session, link);
+  // The partner's answer on the end screen of the run (D35) can come before this client's run has ended
+  listenForAgain(link);
   stopResync?.();
   stopResync = installResync(session, link);
   link.onEnd(end => {
@@ -503,6 +574,8 @@ export function beginSession(
   stopCoopLog?.();
   stopCoopLog = attachCoopLog(session, link, getCoopName());
   setReportButtonVisible(true);
+  // The chat box (D38), for the whole session
+  startChat(link, getCoopName());
   link.sequencer.onDesync(error => {
     session.desyncMessage ??= error.message;
     console.error("co-op desync:", error);
@@ -549,8 +622,23 @@ async function enterLobby(session: CoopSession, link: CoopLink, callbacks: CoopT
   callbacks.onConnected();
 }
 
-/** Create a room, show its code, and enter the lobby once the guest has joined and the handshake is through. */
-async function hostGame(callbacks: CoopTitleCallbacks): Promise<void> {
+/**
+ * Create a room, show its code, and enter the lobby once the guest has joined and the handshake is through.
+ * @param ready - A room the host already created, whose guest joins it by themselves ("Play again", D35; a match, D37), and
+ * what the screen says meanwhile
+ */
+async function hostGame(
+  callbacks: CoopTitleCallbacks,
+  ready?: {
+    room: HostRoom;
+    waiting: string;
+    why: string;
+    copy?: boolean;
+    /** How long the partner may take to come (a match); after it the room ends and `onNoPartner` runs */
+    partnerWaitMs?: number;
+    onNoPartner?: () => void;
+  },
+): Promise<void> {
   const { ui } = globalScene;
   if (!overridesAreDefaults()) {
     showFailure(new Error("overrides in effect"), callbacks);
@@ -561,7 +649,12 @@ async function hostGame(callbacks: CoopTitleCallbacks): Promise<void> {
   let cancelled = false;
   const cancel = (): void => {
     cancelled = true;
-    room?.cancel();
+    if (ready !== undefined && room !== null) {
+      // A room whose partner joins by themselves (a match, Play again): they are told at once, not left waiting in it
+      endRoom(room);
+    } else {
+      room?.cancel();
+    }
     leaveCoop();
     callbacks.onCancel();
   };
@@ -570,14 +663,23 @@ async function hostGame(callbacks: CoopTitleCallbacks): Promise<void> {
   ui.showText(coopText("gettingJoinCode", "Getting a join code…"));
   startLobbyLog();
   try {
-    room = await createRoom(getRelayUrl());
+    room = ready?.room ?? (await createRoom(getRelayUrl()));
     if (cancelled) {
       return;
     }
-    coopLog().setContext({ room: room.identity.code, seat: "host" });
-    coopLog().info("lobby", "room created", { code: room.identity.code });
-    showJoinCode(room.identity.code, cancel);
-    await room.partner;
+    const code = room.identity.code;
+    coopLog().setContext({ room: code, seat: "host" });
+    coopLog().info("lobby", ready === undefined ? "room created" : `room created ${ready.why}`, { code });
+    showJoinCode(code, cancel, ready?.waiting, ready?.copy ?? true);
+    if (!(await partnerWithin(room, ready?.partnerWaitMs))) {
+      if (!cancelled) {
+        cancelled = true;
+        coopLog().info("lobby", "the partner did not come", { code });
+        endRoom(room);
+        ready?.onNoPartner?.();
+      }
+      return;
+    }
     if (cancelled) {
       return;
     }
@@ -614,8 +716,16 @@ async function hostGame(callbacks: CoopTitleCallbacks): Promise<void> {
   }
 }
 
-/** Join the room with this code, shake hands, and enter the lobby. */
-export async function joinGame(rawCode: string, callbacks: CoopTitleCallbacks): Promise<void> {
+/**
+ * Join the room with this code, shake hands, and enter the lobby.
+ * @param match - A code the relay gave a match (D37): if the join fails, `onFailed` runs (it searches again) instead of the
+ * failure screen, and the join form does not keep the code (the player never saw it)
+ */
+export async function joinGame(
+  rawCode: string,
+  callbacks: CoopTitleCallbacks,
+  match?: { onFailed: () => void },
+): Promise<void> {
   const { ui } = globalScene;
   if (!overridesAreDefaults()) {
     showFailure(new Error("overrides in effect"), callbacks);
@@ -623,7 +733,9 @@ export async function joinGame(rawCode: string, callbacks: CoopTitleCallbacks): 
   }
   const code = rawCode.trim().toUpperCase();
   // Kept for the join form until a join goes through: a mistyped code is corrected, not typed again
-  lastFailedCode = code;
+  if (match === undefined) {
+    lastFailedCode = code;
+  }
   startLobbyLog();
   coopLog().setContext({ room: code, seat: "guest" });
   coopLog().info("lobby", "joining", { code });
@@ -661,8 +773,186 @@ export async function joinGame(rawCode: string, callbacks: CoopTitleCallbacks): 
     }
     await enterLobby(session, established.link, callbacks);
   } catch (error) {
-    showFailure(error, callbacks);
+    if (match === undefined) {
+      showFailure(error, callbacks);
+      return;
+    }
+    coopLog().info("lobby", "could not join the match's room", { error: String(error) });
+    if (getCoopSession() !== null) {
+      leaveCoop();
+    }
+    match.onFailed();
   }
+}
+
+/** How long a matched host waits for its partner to come into the room (D37) before it searches again */
+const MATCH_PARTNER_WAIT_MS = 30_000;
+
+/** @returns Whether the partner came into the room, within `ms` if it is given */
+function partnerWithin(room: HostRoom, ms: number | undefined): Promise<boolean> {
+  const came = room.partner.then(() => true);
+  if (ms === undefined) {
+    return came;
+  }
+  return Promise.race([came, new Promise<boolean>(resolve => setTimeout(() => resolve(false), ms))]);
+}
+
+/**
+ * Whether "Find a partner" is offered (D37): with the public relay of the website (and in development). A self-hosted relay
+ * (the Windows pack, Docker) has only the players who were given its address: there is nobody to find there.
+ */
+function matchmakingAvailable(): boolean {
+  return isDev || (import.meta.env.VITE_COOP_RELAY_URL ?? "") !== "";
+}
+
+/** The queue this build waits in (D37): only an identical build can pair (D1) */
+export function matchBuild(): string {
+  return hashCanonical(getLocalBuildIdentity());
+}
+
+/** What a player who could not be paired is told: the relay's own reasons, or that it could not be reached */
+function matchFailureText(error: unknown): string {
+  if (error instanceof RelayError && (error.reason === "rateLimited" || error.reason === "busy")) {
+    return describeCoopError(error);
+  }
+  return coopText("matchFailed", "Could not look for a partner right now. Try again in a minute.");
+}
+
+/** End a room that nobody will come to, for good: a late partner is told at once instead of waiting in it */
+function endRoom(room: HostRoom): void {
+  try {
+    room.relay.leave();
+  } catch {
+    room.cancel();
+  }
+}
+
+/**
+ * "Find a partner" (D37): wait in the relay's queue with the players of this build. Once matched, the player who waited
+ * longer hosts a room as usual and the other joins it by its code, without anyone sharing it; from there it is a new game. A
+ * match that does not become a game (the partner left, or never came) searches again by itself.
+ * @param again - Why it searches again, said before the clock
+ */
+async function findPartner(callbacks: CoopTitleCallbacks, again?: string): Promise<void> {
+  const { ui } = globalScene;
+  if (!overridesAreDefaults()) {
+    showFailure(new Error("overrides in effect"), callbacks);
+    return;
+  }
+  startLobbyLog();
+  coopLog().info("lobby", again === undefined ? "looking for a partner" : "looking for a partner again");
+  const search = findMatch(getRelayUrl(), matchBuild());
+  let cancelled = false;
+  /** Matched: from here the screen is the game's start, not the search's */
+  let matched = false;
+  let settled = false;
+  let seconds = 0;
+  const line = (): string => {
+    if (matched) {
+      return coopText("matchFound", "Found a partner! Getting the game ready…");
+    }
+    const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    return again === undefined
+      ? coopText("matchLooking", "Looking for a partner… {{clock}}", { clock })
+      : `${again} ${clock}`;
+  };
+  const draw = (): void => {
+    if (!cancelled && !settled) {
+      ui.showText(line(), 0, undefined, null, false);
+    }
+  };
+  const ticker = setInterval(() => {
+    seconds++;
+    if (!matched) {
+      draw();
+    }
+  }, 1000);
+  search.onStatus(status => {
+    matched = status === "matched";
+    draw();
+  });
+  // The menu goes up once the screen is the message's (the co-op menu fades out first); the clock updates the line under it
+  await ui.setMode(UiMode.MESSAGE);
+  draw();
+  ui.setOverlayMode(UiMode.OPTION_SELECT, {
+    options: [
+      {
+        label: i18next.t("menu:cancel"),
+        handler: () => {
+          cancelled = true;
+          clearInterval(ticker);
+          search.cancel();
+          coopLog().info("lobby", "stopped looking for a partner");
+          ui.setMode(UiMode.MESSAGE).then(() => {
+            ui.clearText();
+            showCoopTitleMenu(callbacks);
+          });
+          return true;
+        },
+      },
+    ],
+    yOffset: 48,
+  });
+  let role: MatchRole;
+  try {
+    role = await search.found;
+  } catch (error) {
+    clearInterval(ticker);
+    search.cancel();
+    if (!cancelled) {
+      showFailure(error, callbacks, matchFailureText(error));
+    }
+    return;
+  }
+  clearInterval(ticker);
+  settled = true;
+  if (cancelled) {
+    search.cancel();
+    return;
+  }
+  coopLog().info("lobby", "found a partner", { role: role.role });
+  const searchAgain = (why: string): void => {
+    void findPartner(callbacks, why);
+  };
+  if (role.role === "guest") {
+    search.cancel();
+    await joinGame(role.code, callbacks, {
+      onFailed: () => searchAgain(coopText("matchJoinFailed", "Could not reach your partner. Looking again…")),
+    });
+    return;
+  }
+  let room: HostRoom;
+  try {
+    room = await createRoom(getRelayUrl());
+  } catch (error) {
+    // The relay closes the queue's connection, and the partner goes back in the queue
+    search.cancel();
+    if (!cancelled) {
+      showFailure(error, callbacks, matchFailureText(error));
+    }
+    return;
+  }
+  const delivered = await role.sendCode(room.identity.code);
+  search.cancel();
+  if (cancelled) {
+    endRoom(room);
+    return;
+  }
+  if (!delivered) {
+    coopLog().info("lobby", "the partner left before the room was made");
+    endRoom(room);
+    searchAgain(coopText("matchPartnerLeft", "Your partner left. Looking again…"));
+    return;
+  }
+  await hostGame(callbacks, {
+    room,
+    waiting: coopText("matchWaiting", "Found a partner! Waiting for them to connect…"),
+    why: "for a match",
+    // nobody types this code: the relay gave it to the partner
+    copy: false,
+    partnerWaitMs: MATCH_PARTNER_WAIT_MS,
+    onNoPartner: () => searchAgain(coopText("matchNoShow", "Your partner did not connect. Looking again…")),
+  });
 }
 
 /** Ask for this player's name (D1), then come back to the co-op menu. */
@@ -699,6 +989,18 @@ function showJoinForm(callbacks: CoopTitleCallbacks): void {
     },
     lastFailedCode ?? "",
   );
+}
+
+/**
+ * Host, after "Play again" (D35): wait in the room created at the end of the last run for the partner, who joins it by
+ * themselves, then enter the lobby as for a new game
+ */
+export function hostAgain(callbacks: CoopTitleCallbacks, room: HostRoom, partner: string): Promise<void> {
+  const waiting = coopText("againWaiting", "Waiting for {{partner}} to join the new game (code {{code}})…", {
+    partner,
+    code: room.identity.code,
+  });
+  return hostGame(callbacks, { room, waiting, why: "to play again" });
 }
 
 /** Host: start a game without the menus (the debug API and the end-to-end test use it) */

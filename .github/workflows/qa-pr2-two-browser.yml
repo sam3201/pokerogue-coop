@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   human-human-relay:
-    name: Two independent browsers - real relay matchmaking
+    name: Two independent browsers - synchronized first battle
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -25,8 +25,8 @@ jobs:
       - name: Install browser and OS dependencies
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run existing real two-browser matchmaking and chat acceptance
-        run: pnpm exec playwright test test/e2e/coop-matchmaking.spec.ts --project=chromium --workers=1 --reporter=line
+      - name: Run existing synchronized wave-one two-browser acceptance
+        run: pnpm exec playwright test test/e2e/coop-battle.spec.ts --project=chromium --workers=1 --reporter=line
 
       - name: Preserve traces and screenshots on failure
         if: failure()

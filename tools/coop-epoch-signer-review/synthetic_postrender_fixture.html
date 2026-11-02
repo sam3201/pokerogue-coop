@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;padding:0;width:640px;height:360px}</style>
+</head><body><canvas id="game" width="640" height="360"></canvas>
+<script>
+(()=>{
+ const canvas=document.querySelector("#game"),ctx=canvas.getContext("2d");
+ const listeners=new Set();
+ const events={
+  once(type,cb){if(type==="postrender")listeners.add(cb);},
+  off(type,cb){if(type==="postrender")listeners.delete(cb);},
+  fire(){
+   const pending=[...listeners];listeners.clear();
+   for(const cb of pending)cb();
+  }
+ };
+ const loop={frame:0,asleep:false,
+  sleep(){this.asleep=true;},
+  wake(){this.asleep=false;}};
+ const fakeImg={src:location.origin+"/images/synthetic.png"};
+ const sprite={type:"Image",alpha:1,visible:true,active:true,
+   texture:{key:"synthetic"},displayOriginX:2,displayOriginY:2,scrollFactorX:1,scrollFactorY:1,
+   frame:{cutX:0,cutY:0,cutWidth:5,cutHeight:5,width:5,height:5,
+     source:{image:fakeImg}},
+   getWorldTransformMatrix(){return {a:1,b:0,c:0,d:1,tx:loop.frame,ty:120};}
+ };
+ const camera={width:1920,height:1080,x:0,y:0,
+  scrollX:0,scrollY:0,zoom:1,rotation:0};
+ globalThis.__fixtureScene={
+  scene:{isActive(){return true;}},
+  cameras:{main:camera},children:{list:[sprite]},
+  game:{events,loop}
+ };
+ globalThis.__fixtureLoop=loop;
+ globalThis.__fixtureDrawTick=0;
+ setInterval(()=>{
+  if(loop.asleep)return;
+  loop.frame++;
+  const f=loop.frame;
+  const gradient=ctx.createLinearGradient(0,0,640,360);
+  gradient.addColorStop(0,"rgb("+f%255+",70,120)");
+  gradient.addColorStop(1,"rgb(150,"+(f*3)%255+",220)");
+  ctx.fillStyle=gradient;ctx.fillRect(0,0,640,360);
+  for(let i=0;i<24;i++){
+   ctx.fillStyle="rgb("+((i*13+f)%256)+","+((i*23)%256)+","+((i*41)%256)+")";
+   ctx.fillRect(i*27,(i*39)%360,9,17);
+  }
+  globalThis.__fixtureDrawTick=f;
+  events.fire();
+ },33);
+})();
+</script></body></html>

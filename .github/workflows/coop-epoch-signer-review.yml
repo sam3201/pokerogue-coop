@@ -1,0 +1,184 @@
+name: SAM co-op epoch signer review checks
+
+on:
+  push:
+    branches:
+      - review/coop-epoch-signer-isolation-20261031
+    paths:
+      - tools/coop-epoch-signer-review/**
+      - .github/workflows/coop-epoch-signer-review.yml
+  pull_request:
+    paths:
+      - tools/coop-epoch-signer-review/**
+      - .github/workflows/coop-epoch-signer-review.yml
+
+permissions:
+  contents: read
+
+jobs:
+  signer-review:
+    name: Focused signer and provisioning tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install test dependency
+        run: python -m pip install --disable-pip-version-check 'cryptography>=42,<47'
+      - name: Run isolated signer security tests
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          python -m unittest -q \
+            test_private_owner_signer_service_v1.py \
+            test_verify_signer_install_v1.py \
+            test_staged_signer_isolated_entrypoint_v1.py \
+            test_preflight_owner_isolation_v1.py
+      - name: Test isolated relay gateway and eleven-gate preflight
+        working-directory: tools/coop-epoch-signer-review
+        run: python -m unittest -q test_private_relay_peer_gateway_v1.py
+      - name: Test capture-owner enrollment and relay broker in Node
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          node --check capture_owner_room_enrollment_v1.mjs
+          node --check owner_room_grant_broker_v1.mjs
+          node --check owner_room_grant_ipc_v1.mjs
+          node --test test_capture_owner_room_enrollment_v1.mjs test_owner_room_grant_broker_v1.mjs
+      - name: Run isolated Node and Python relay gateway fixture
+        working-directory: tools/coop-epoch-signer-review
+        run: node run_real_disposable_peer_gateway_v1.mjs
+      - name: Run synthetic scene and private transport regression suite
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          mkdir -p texture-staging
+          node --test \
+            test_phaser_sprite_render.mjs test_field_sprite_cpu.mjs \
+            test_field_sprite_cpu_v2.mjs test_texture_registry_v1.mjs \
+            test_scene_asset_binding_v1.mjs test_texture_staging_v1.mjs \
+            test_scene_pair_signature_v1.mjs test_browser_asset_verify_v1.mjs \
+            test_browser_scene_pair_verify_v1.mjs \
+            test_real_pair_witness_v1.mjs test_paired_frame_cursor_v1.mjs \
+            test_agnostic_xor_frame_diagnostics_v1.mjs \
+            test_agnostic_xor_byte_delta_v1.mjs \
+            test_trusted_paired_delta_chain_v1.mjs \
+            test_private_epoch_capture_contract_v1.mjs \
+            test_owner_postrender_bridge_v1.mjs test_owner_epoch_seal_v1.mjs \
+            test_relay_checkpoint_gate_v1.mjs \
+            test_relay_observed_checkpoint_ledger_v1.mjs \
+            test_relay_room_checkpoint_adapter_v1.mjs \
+            test_owner_room_grant_broker_v1.mjs \
+            test_owner_room_grant_ipc_v1.mjs \
+            test_owner_signing_key_custody_v1.mjs \
+            test_capture_owner_room_enrollment_v1.mjs
+      - name: Measure lossless agnostic XOR byte-delta payload and decode on generated frames
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 85s node run_agnostic_xor_byte_delta_benchmark_v1.mjs
+      - name: Install isolated synthetic Chromium fixture dependency
+        run: |
+          npm install --prefix tools/coop-epoch-signer-review --no-save --no-audit --no-fund --ignore-scripts --package-lock=false @playwright/test@1.64.1
+          (cd tools/coop-epoch-signer-review && npx --no-install playwright install chromium)
+      - name: Verify two-tab Phaser postrender freeze and failure cleanup
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 95s node run_synthetic_two_seat_postrender_v1.mjs
+      - name: Verify atomic manual paired-frame 0-to-1-to-2 presentation in Chromium
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 75s node run_atomic_paired_manual_step_v1.mjs
+      - name: Verify signed scene and approved texture through atomic Chromium viewer
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 75s node run_verified_atomic_browser_pipeline_v1.mjs
+      - name: Verify signed representation-agnostic XOR deltas in real Chromium
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 75s node run_signed_agnostic_delta_chromium_v1.mjs
+      - name: Verify commit-bound signed XOR chain and fresh-run recovery in real Chromium
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 95s node run_trusted_paired_delta_chain_chromium_v1.mjs
+      - name: Verify atomic coordinator rollback, cancellation and failure recovery in Chromium
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 95s node run_coordinated_paired_delta_chromium_v1.mjs
+      - name: Measure synthetic verified 48-frame paired scene compositor throughput
+        working-directory: tools/coop-epoch-signer-review
+        timeout-minutes: 2
+        run: |
+          timeout --signal=TERM --kill-after=3s 95s node run_synthetic_verified_frame_benchmark_v1.mjs
+          SAM_XOR_DIAGNOSTIC=1 timeout --signal=TERM --kill-after=3s 95s node run_synthetic_verified_frame_benchmark_v1.mjs
+      - name: Install disposable relay WebSocket dependency
+        run: npm install --prefix coop-server --no-save --no-audit --no-fund --ignore-scripts --package-lock=false ws@8.22.0
+      - name: Run disposable real-relay observer and private grant V4-V6 fixtures
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          node --version
+          timeout --signal=TERM --kill-after=2s 40s node run_real_disposable_relay_observer_v1.mjs
+          timeout --signal=TERM --kill-after=2s 40s node run_real_disposable_owner_ipc_v4.mjs
+          timeout --signal=TERM --kill-after=2s 40s node run_real_disposable_key_custody_v5.mjs
+          timeout --signal=TERM --kill-after=2s 40s node run_real_disposable_signer_process_v6.mjs
+      - name: Prove separate relay and capture Unix UIDs (disposable CI only)
+        working-directory: tools/coop-epoch-signer-review
+        run: sudo -n "$(command -v python)" -I test_distinct_uid_relay_gateway_v1.py
+      - name: Prove distinct Unix UID signer isolation (disposable CI only)
+        working-directory: tools/coop-epoch-signer-review
+        run: sudo -n "$(command -v python)" -I test_distinct_uid_signer_integration_v1.py
+      - name: Prove combined relay gateway and signer authorization with distinct Linux UIDs
+        working-directory: tools/coop-epoch-signer-review
+        run: sudo -n "$(command -v python)" -I test_three_principal_room_enrollment_v1.py
+      - name: Check owner-gated relay patch compatibility without applying
+        run: git apply --check tools/coop-epoch-signer-review/RELAY_OWNER_SIGNED_ROOM_GRANT_V3.patch
+      - name: Verify opt-in identity bootstrap on disposable CI host
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          bash stage_owner_isolation_v1.sh
+          bash stage_owner_isolation_v1.sh --plan
+          if ! getent passwd sam3201 >/dev/null; then
+            sudo -n useradd --system --user-group --no-create-home --shell /usr/sbin/nologin sam3201
+          fi
+          sudo -n bash stage_owner_isolation_v1.sh --apply
+          sudo -n bash stage_owner_isolation_v1.sh --verify
+          sudo -n bash stage_owner_isolation_v1.sh --apply
+          test ! -e /var/lib/sam-coop-signer/owner-ed25519.pk8
+          test ! -e /etc/systemd/system/sam-coop-owner-signer.service
+          python - <<'PY'
+          import json, subprocess
+          from preflight_owner_isolation_v1 import facts, assess
+          snapshot=facts()
+          assert all(snapshot[k] for k in (
+              "distinct_os_identities","distinct_relay_os_identity",
+              "signer_private_state_directory","root_owned_code_path"
+          )),snapshot
+          assert not snapshot["signer_private_key_metadata"]
+          assert not snapshot["root_owned_configuration"]
+          report=assess(snapshot)
+          assert not report["production_scene_eligible"]
+          p=subprocess.run(["python","preflight_owner_isolation_v1.py"],
+                           text=True,capture_output=True)
+          assert p.returncode==2, p.stderr
+          assert json.loads(p.stdout)==report
+          print("STAGED_ONLY_PREFLIGHT_OK")
+          PY
+      - name: Verify reviewed code digests
+        working-directory: tools/coop-epoch-signer-review
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          d = Path('signer_install_review_v1/code')
+          m = json.loads((d / 'signer-code-manifest.json').read_text())
+          assert m['schema'] == 'sam.coop.signer-code-manifest.v1'
+          assert len(m['files']) == 3
+          for name, digest in m['files'].items():
+              assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest, name
+          print('STAGED_MANIFEST_OK')
+          PY

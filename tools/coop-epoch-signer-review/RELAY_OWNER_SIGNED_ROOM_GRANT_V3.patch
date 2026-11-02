@@ -1,0 +1,90 @@
+--- a/coop-server/src/relay-server.ts
++++ b/coop-server/src/relay-server.ts
+@@ -7,6 +7,7 @@
+  * (AGPL-3.0-only). Seat tokens, per-seat hold, the rejoin flow, the static files and the limits are new.
+  */
+ 
++import { createHash } from "node:crypto";
+ import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+ import type { Duplex } from "node:stream";
+ import { type RawData, type WebSocket, WebSocketServer } from "ws";
+@@ -78,6 +79,24 @@
+   path?: string;
+   /** The client diagnostics log (D26, `POST <path>/log`); off unless `enabled` */
+   clientLogs?: ClientLogOptions;
++  /** Private synchronous room creation notification from the relay itself.
++   * The roomHandle is a secret room code: do not log, persist or publish it.
++   * A hook failure cannot prevent a room from opening.
++   */
++  onRoomCreated?: (event: { roomHandle: string; hostTokenDigest: string }) => void;
++  /** Private room teardown notification. */
++  onRoomClosed?: (event: {
++    roomHandle: string;
++    reason: "hostGone" | "partnerLeft" | "idle";
++  }) => void;
++  /** Only diagnostic; after peer.send queues a small CHECKPOINT frame.
++   * Not an acknowledgement or proof of actual simulation state.
++   */
++  onForwardedCheckpoint?: (event: {
++    roomHandle: string;
++    seat: Seat;
++    text: string;
++  }) => void;
+   /** Injected for tests. */
+   now?: () => number;
+   log?: (message: string) => void;
+@@ -306,6 +325,15 @@
+       }
+       stalled.delete(peer);
+       peer.send(text);
++      if (options.onForwardedCheckpoint
++          && text.length <= 4096
++          && text.includes('"CHECKPOINT"')) {
++        try {
++          options.onForwardedCheckpoint({ roomHandle: code, seat, text });
++        } catch {
++          // Observer failure must not affect game data already queued.
++        }
++      }
+     });
+ 
+     socket.on("close", (closeCode: number) => {
+@@ -319,6 +347,11 @@
+         const partner = current[otherSeat(seat)];
+         sockets.delete(code);
+         registry.leave(code);
++        try {
++          options.onRoomClosed?.({ roomHandle: code, reason: "partnerLeft" });
++        } catch {
++          // Lifecycle diagnostics never interrupt socket closure.
++        }
+         if (partner) {
+           send(partner, { t: "relay:closed", reason: "partnerLeft" });
+           partner.close(CLOSE_CODE_ROOM_CLOSED, "partnerLeft");
+@@ -367,6 +400,14 @@
+         return;
+       }
+       const created = registry.createRoom();
++      try {
++        options.onRoomCreated?.({
++          roomHandle: created.code,
++          hostTokenDigest: createHash("sha256").update(created.token).digest("hex"),
++        });
++      } catch {
++        // Private diagnostics cannot stop the live room opening.
++      }
+       attach(socket, created.code, "host", ip);
+       send(socket, { t: "relay:created", code: created.code, seat: "host", token: created.token });
+       log(`coop relay: room ${created.code} created`);
+@@ -461,6 +502,11 @@
+         log(`coop relay: room ${event.code} closed (${event.reason})`);
+         const room = sockets.get(event.code);
+         sockets.delete(event.code);
++        try {
++          options.onRoomClosed?.({ roomHandle: event.code, reason: event.reason });
++        } catch {
++          // Lifecycle diagnostics never interrupt room cleanup.
++        }
+         for (const socket of [room?.host, room?.guest]) {
+           if (socket) {
+             send(socket, { t: "relay:closed", reason: event.reason });

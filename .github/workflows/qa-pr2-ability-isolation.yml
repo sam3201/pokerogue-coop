@@ -1,0 +1,35 @@
+name: PR2 Ability Timeout Isolation QA
+
+on:
+  push:
+    branches:
+      - qa/pr2-ability-isolation-20261102
+
+permissions:
+  contents: read
+
+jobs:
+  compare-isolation:
+    name: Ability timeouts - ${{ matrix.mode }}
+    timeout-minutes: 12
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [isolated, non-isolated]
+    steps:
+      - name: Checkout same game and test source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+
+      - name: Install repository test dependencies
+        uses: ./.github/actions/setup-deps
+
+      - name: Run only existing Forecast and Unburden suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.mode }}" = "isolated" ]; then
+            pnpm exec vitest run --isolate --maxWorkers=1 test/tests/abilities/forecast.test.ts test/tests/abilities/unburden.test.ts
+          else
+            pnpm exec vitest run --no-isolate --maxWorkers=1 test/tests/abilities/forecast.test.ts test/tests/abilities/unburden.test.ts
+          fi

@@ -57,6 +57,7 @@ describe("coop save block (D4, D7, D9)", () => {
     ["a bad owner", { owners: { "1": "nobody" } }],
     ["a negative counter", { rewardPickCount: -1 }],
     ["a fractional counter", { rewardPickCount: 1.5 }],
+    ["an invalid reward priority", { rewardPriority: "speed" }],
     ["a bad snapshot", { accounts: { host: account(1) } }],
     ["timed events that are no names", { events: [7] }],
     ["met trainers that are no trainer types", { trainers: ["YOUNGSTER"] }],
@@ -194,15 +195,34 @@ describe("the session and its save block", () => {
     expect(() => checkSessionSaveBlock(undefined)).toThrow("solo run");
   });
 
-  it("the picker of the reward screens alternates, host first, and a reroll is not a new screen", () => {
-    expect([0, 1, 2, 3, 4].map(rewardPickerOf)).toEqual(["host", "guest", "host", "guest", "host"]);
-
+  it("defaults reward priority to host, including subsequent screens", () => {
+    expect([0, 1, 2, 3, 4].map(index => rewardPickerOf(index))).toEqual(["host", "host", "host", "host", "host"]);
     const session = startCoopSession({ seat: "host", runSeed: "s", build });
+    expect(session.rewardPriority).toBe("host");
     expect(session.lastRewardPicker).toBe("host");
     expect(session.beginRewardScreen()).toEqual({ index: 0, picker: "host" });
+    expect(session.beginRewardScreen()).toEqual({ index: 1, picker: "host" });
     expect(session.lastRewardPicker).toBe("host");
+    expect(() => session.setRewardPriority("guest")).toThrow();
+    expect(session.rewardPriority).toBe("host");
+  });
+
+  it("respects explicit guest/alternating priority and preserves an older alternating save", () => {
+    const session = startCoopSession({
+      seat: "host",
+      runSeed: "s",
+      build,
+      accountIds: { host: "h", guest: "g" },
+    });
+    session.setRewardPriority("guest");
+    expect(session.beginRewardScreen()).toEqual({ index: 0, picker: "guest" });
     expect(session.beginRewardScreen()).toEqual({ index: 1, picker: "guest" });
-    expect(session.lastRewardPicker).toBe("guest");
-    expect(session.rewardPickCount).toBe(2);
+    expect(session.rewardPriority).toBe("guest");
+    session.restoreFromSaveBlock(block({ rewardPriority: "alternate", rewardPickCount: 2 }));
+    expect(session.rewardPriority).toBe("alternate");
+    expect(session.beginRewardScreen()).toEqual({ index: 2, picker: "host" });
+    session.restoreFromSaveBlock(block({ rewardPriority: undefined, rewardPickCount: 1 }));
+    expect(session.rewardPriority).toBe("alternate");
+    expect(session.beginRewardScreen()).toEqual({ index: 1, picker: "guest" });
   });
 });

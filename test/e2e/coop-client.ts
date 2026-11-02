@@ -437,7 +437,7 @@ export async function playUntil(
 }
 
 /** Play until reward screen number `screen` is up (`null`: any) */
-export function playToRewardScreen(client: Client, screen: number | null = null): Promise<void> {
+export function playToRewardScreen(client: Client, screen: number | null = null, timeout = 300_000): Promise<void> {
   return playUntil(
     client,
     "the reward screen",
@@ -445,6 +445,7 @@ export function playToRewardScreen(client: Client, screen: number | null = null)
       state.phase?.name === "SelectModifierPhase"
       && state.ui === "MODIFIER_SELECT"
       && (screen === null || state.screen === screen),
+    timeout,
   );
 }
 

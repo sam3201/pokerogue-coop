@@ -1,0 +1,40 @@
+name: Co-op two-browser QA (isolated)
+
+on:
+  push:
+    branches:
+      - qa/pr2-two-browser-20261102
+
+permissions:
+  contents: read
+
+jobs:
+  human-human-relay:
+    name: Two independent browsers - real relay matchmaking
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Check out game with its assets and locales
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+        with:
+          submodules: "recursive"
+
+      - name: Install repository dependencies
+        uses: ./.github/actions/setup-deps
+
+      - name: Install browser and OS dependencies
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run existing real two-browser matchmaking and chat acceptance
+        run: pnpm exec playwright test test/e2e/coop-matchmaking.spec.ts --project=chromium --workers=1 --reporter=line
+
+      - name: Preserve traces and screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coop-two-browser-e2e-artifacts
+          path: |
+            test-results/e2e/
+            test-results/screenshots/
+          if-no-files-found: ignore
+          retention-days: 2

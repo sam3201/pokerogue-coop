@@ -218,7 +218,7 @@ export class TitlePhase extends Phase {
     const config: OptionSelectModeConfig = { options, blockCancelButton: true };
     await ui.setMode(UiMode.TITLE, config);
     // The homepage's ?coop=1 link opens co-op first, without joining a room or seizing a bot seat.
-    if (!directCoopEntryConsumed && typeof window !== "undefined" && directCoopEntryRequested(window.location.search)) {
+    if (!directCoopEntryConsumed && typeof window !== "undefined" && directCoopEntryRequested(window.location.search, window.location)) {
       directCoopEntryConsumed = true;
       showCoopTitleMenu(this.coopCallbacks());
     }

@@ -27,6 +27,7 @@ env:
 
 jobs:
   check-path-change-filter:
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     timeout-minutes: 5
     runs-on: ubuntu-latest
     permissions:
@@ -161,3 +162,18 @@ jobs:
           filename: coverage-badge.json
           label: "Test Coverage"
           forceUpdate: true
+
+  qa-capture-focused:
+    name: PR2 focused capture and owner rules (QA branch only)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-deps
+      - name: Verify capture references and co-op protocol
+        run: pnpm exec vitest run --config vitest.coop.config.ts test/coop/agent-capture-lesson.test.ts test/coop/protocol.test.ts test/coop/starter-lobby.test.ts test/coop/save-block.test.ts --maxWorkers=1
+      - name: Verify in-game owner and reward contracts
+        run: pnpm exec vitest run --silent=passed-only test/tests/coop/owner-rules.test.ts test/tests/coop/faint-rules.test.ts test/tests/coop/linked-rewards.test.ts --maxWorkers=1

@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 pokerogue-coop contributors
+# SPDX-License-Identifier: CC0-1.0
+name: Co-op direct entry CI
+
+on:
+  pull_request:
+    branches: [coop]
+    paths:
+      - "src/phases/title-phase.ts"
+      - "src/coop/direct-entry.ts"
+      - "test/coop/direct-entry.test.ts"
+      - ".github/workflows/coop-direct-entry-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  direct-entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-deps
+      - name: Verify co-op URL and title integration formatting
+        run: pnpm exec biome check src/phases/title-phase.ts src/coop/direct-entry.ts test/coop/direct-entry.test.ts --diagnostic-level=error
+      - name: Verify direct co-op URL
+        run: pnpm exec vitest run --config vitest.coop.config.ts test/coop/direct-entry.test.ts --maxWorkers=1
+      - name: Verify TypeScript
+        run: pnpm exec tsc --noEmit --pretty false

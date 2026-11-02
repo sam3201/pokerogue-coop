@@ -402,8 +402,9 @@ describe("Co-op: the decisions of the battle go through the sequencer (D2, D7, D
   });
 
   describe("the replacement of a fainted Pokémon (D7)", () => {
-    it("is decided by the partner when the owner has no bench, and nobody changes owner", async () => {
-      // The host brings one Pokémon and the guest three: when the host's faints, the guest picks from the guest's bench
+    it("ends the run when the owner has no bench, without borrowing the partner's Pokémon", async () => {
+      // The host owns just one Pokémon and the guest still has three.
+      // Fainting the host's only Pokémon must end the co-op attempt.
       const r = await start({
         species: [SpeciesId.BULBASAUR, SpeciesId.SQUIRTLE, SpeciesId.CHARMANDER, SpeciesId.PIKACHU],
         starterOwners: ["host", "guest", "guest", "guest"],
@@ -417,20 +418,17 @@ describe("Co-op: the decisions of the battle go through the sequencer (D2, D7, D
       const fainting = game.scene.getPlayerField()[0];
       expect(ownerOf(fainting)).toBe("host");
 
-      // The host's Pokémon uses Memento and faints; the partner attacks
       queueTurnCommands(ctx);
-      await advanceTo(ctx, ["TurnInitPhase", "SelectModifierPhase"]);
+      await game.phaseInterceptor.to("PostGameOverPhase", false);
 
-      const replacement = game.scene.getPlayerField()[0];
-      expect(replacement.id).not.toBe(fainting.id);
-      expect(ownerOf(replacement)).toBe("guest");
+      expect(session.eliminatedSeat).toBe("host");
       expect(ownerOf(fainting)).toBe("host");
       expect(session.ownership.toJSON()).toEqual(owners);
-      // the guest decided it, with the turn the replacement was asked in (the faint turn + 1, D2)
-      const key = partner.answeredKeys.find(id => id.includes(":FAINT_SWITCH:"));
-      expect(key).toBeDefined();
-      expect(key).toContain(`:${game.scene.currentBattle.turn > 1 ? 2 : 1}:`);
-      expect([controllerOf(0), controllerOf(1)]).toEqual(["guest", "guest"]);
+      const guestParty = game.scene.getPlayerParty().filter(pokemon => ownerOf(pokemon) === "guest");
+      expect(guestParty.length).toBe(3);
+      expect(guestParty.some(pokemon => !pokemon.isFainted())).toBe(true);
+      // The surviving guest cannot take over the wiped host's field slot.
+      expect(partner.answeredKeys.some(key => key.includes(":FAINT_SWITCH:"))).toBe(false);
     });
   });
 

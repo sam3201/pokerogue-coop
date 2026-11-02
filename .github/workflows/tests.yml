@@ -77,12 +77,7 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
-        with:
-          sparse-checkout: |
-            .github/actions/setup-deps/action.yml
-            test/setup
-            test/reporters/custom-default-reporter.ts
-            patches
+        # QA-only full checkout for Vitest report aggregation.
 
       - uses: ./.github/actions/setup-deps
 

@@ -6,17 +6,27 @@
 import { directCoopEntryRequested } from "#coop/direct-entry";
 import { describe, expect, it } from "vitest";
 
-describe("direct co-op lobby link", () => {
-  it("opens the co-op menu for an explicit website link", () => {
+const github = { hostname: "sam3201.github.io", pathname: "/pokerogue-coop/" };
+
+describe("co-op website entry", () => {
+  it("opens the co-op menu from the existing SAM homepage link", () => {
+    expect(directCoopEntryRequested("", github)).toBe(true);
+    expect(directCoopEntryRequested("?utm_source=home", github)).toBe(true);
+    expect(directCoopEntryRequested("", { ...github, pathname: "/pokerogue-coop/index.html" })).toBe(true);
+  });
+  it("permits explicit co-op deep links on other origins", () => {
     expect(directCoopEntryRequested("?coop=1")).toBe(true);
     expect(directCoopEntryRequested("?utm_source=home&coop=1")).toBe(true);
   });
-  it("never hijacks ordinary or disabled game entry", () => {
-    for (const query of ["", "?coop=0", "?coop=true", "?cooperative=1", "?coop=1&coop=0"]) {
-      expect(directCoopEntryRequested(query)).toBe(false);
+  it("preserves deliberate solo access and refuses conflicting values", () => {
+    for (const query of ["?solo=1", "?coop=0", "?coop=1&coop=0", "?solo=1&coop=1"]) {
+      expect(directCoopEntryRequested(query, github)).toBe(false);
     }
   });
-  it("does not accept arbitrary room codes as automatic joins", () => {
+  it("never redirects unrelated websites or joins rooms implicitly", () => {
+    expect(directCoopEntryRequested("")).toBe(false);
+    expect(directCoopEntryRequested("", { hostname: "example.com", pathname: "/pokerogue-coop/" })).toBe(false);
+    expect(directCoopEntryRequested("", { ...github, pathname: "/pokerogue-coop/private/" })).toBe(false);
     expect(directCoopEntryRequested("?room=ABC123")).toBe(false);
   });
 });

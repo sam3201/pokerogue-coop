@@ -72,6 +72,12 @@ The first gate is deliberately restricted to `source: actor`, with the actual ch
 
 **Security limit:** internally consistent JSON is **not** trusted process attestation. The reviewer must separately validate the real model process identity, live observation capture, browser profile ownership, relay/session receipts and checkpoint origin. Keep raw room join codes, seat tokens, private paths, model weights and screenshots out of published PRs and CI logs. The synthetic Node tests for this verifier establish only that the rejection gate works.
 
+### Guest wire-provenance observation now established in scripted QA
+
+The independently hosted [Chromium receipt run #41734295275](https://github.com/sam3201/pokerogue-coop/actions/runs/41734295275) now establishes a **scripted** guest's actual reliable WebSocket relay path at the first turn. Through **passive WebSocket frame inspection** (no gameplay instrumentation), QA observed an `author=guest`, non-takeover `TURN_COMMANDS` `PROPOSE` sent by the guest and received by the host, followed by the matching host-sent `SEQUENCED` frame received by the guest with the same positive `seq` and decision key. This occurred in the existing physical guest keyboard test while subsequent checkpoint hashes agreed with no reported desync. [Draft PR #9](https://github.com/sam3201/pokerogue-coop/pull/9) contains the exact passing test source; no room codes, seat tokens or payload bodies are preserved in its receipt attachment.
+
+**Precise host/guest direction matters:** the host assigns and applies its own sequence locally; an acceptance record should describe `host SEQUENCED sent / guest SEQUENCED received`, **not** fabricate a `host SEQUENCED received` network event. This new proof validates guest **browser input -> co-op relay sequencing**, not actual actor-originated inputs. The unimplemented SAM-owned bridge must bind its real `request_id`, model hash and visual observation to the accepted guest command, without inventing an action or relying only on synthetically consistent JSON. No model was invoked by this QA step.
+
 ## Bounded SAM-owned implementation, in order
 
 ### A. Invite-only guest first: one real learned decision

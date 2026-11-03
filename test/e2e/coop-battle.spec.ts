@@ -32,8 +32,9 @@ test.describe("co-op: two clients play wave 1 together", () => {
     browser,
   }, testInfo) => {
     test.setTimeout(900_000);
-    const hostContext = await newClientContext(browser);
-    const guestContext = await newClientContext(browser);
+    // QA-only: use the existing fast client settings to reduce hosted SwiftShader text-render latency.
+    const hostContext = await newClientContext(browser, true);
+    const guestContext = await newClientContext(browser, true);
     const [host, guest] = await Promise.all([openClient(hostContext, "host"), openClient(guestContext, "guest")]);
 
     try {

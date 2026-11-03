@@ -28,6 +28,17 @@ function proof(bytes) {
   const event = (id, ui) => ({
     requestId: id, observationSha256: sha("frame:" + id), tileCount: 144,
     source: "actor", fallback: false, action: "A", ui,
+    workerResponse: {
+      request_id: id, action: "A",
+      sam: {
+        source: "actor",
+        actor_top: [
+          { action: "A", logit: 0.3, probability: 0.25 },
+          { action: "UP", logit: 0.2, probability: 0.21 },
+          { action: "DOWN", logit: 0.1, probability: 0.18 },
+        ],
+      },
+    },
     ack: {
       requestId: id, seat: "guest", channel: "physical-keyboard",
       requestedAction: "A", executedAction: "A",
@@ -103,10 +114,21 @@ describe("SAM co-op guest policy evidence (QA consistency only)", () => {
   it("requires genuine actor-source command and fight inputs", () => {
     assert.throws(() => validate(x => x.events[0].ui = "MESSAGE"), /independent actor-selected/);
     assert.throws(() => validate(x => x.events[1].source = "world-model"), /not proven actor/);
+    assert.throws(() => validate(x => x.events[0].workerResponse.sam.source = "world-model"),
+      /native SAM actor provenance/);
+    assert.throws(() => validate(x => delete x.events[0].workerResponse.sam),
+      /native SAM actor provenance/);
+    assert.throws(() => validate(x => x.events[0].workerResponse.request_id = "other"),
+      /worker reply does not match/);
+    assert.throws(() => validate(x => x.events[0].workerResponse.action = "WAIT"),
+      /worker reply does not match/);
+    assert.throws(() => validate(x => x.events[0].workerResponse.sam.actor_top = []),
+      /native SAM actor candidate/);
     assert.throws(() => validate(x => {
       // Keep the acknowledgment consistent so this specifically tests a
       // policy that never selected a fight move, not an ack mismatch.
       x.events[1].action = "WAIT";
+      x.events[1].workerResponse.action = "WAIT";
       x.events[1].ack.requestedAction = "WAIT";
       x.events[1].ack.executedAction = "WAIT";
     }), /independent actor-selected/);

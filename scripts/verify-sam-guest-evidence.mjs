@@ -84,6 +84,23 @@ export function verifySamGuestEvidence(evidence, actorFileBytes) {
     check(SHA256.test(event.observationSha256 || "") && natural(event.tileCount, 1),
       "missing visual observation fingerprint or tile tokens");
     check(event.source === "actor" && event.fallback === false, "response is not proven actor-source output");
+    // unit1.js stdout carries request_id and the actual brain.js "sam"
+    // envelope. A synthetic event.source without this native response could
+    // conceal a WAIT/error fallback or mix the outputs of two requests.
+    const reply = event.workerResponse;
+    check(object(reply) && reply.request_id === event.requestId
+      && reply.action === event.action, "worker reply does not match this request and action");
+    check(object(reply.sam) && reply.sam.source === "actor",
+      "missing native SAM actor provenance in worker reply");
+    check(Array.isArray(reply.sam.actor_top) && reply.sam.actor_top.length === 3
+      && reply.sam.actor_top.every((candidate, i, list) =>
+        object(candidate) && ACTIONS.includes(candidate.action)
+        && Number.isFinite(candidate.logit)
+        && Number.isFinite(candidate.probability)
+        && candidate.probability >= 0 && candidate.probability <= 1
+        && (i === 0 || list[i - 1].probability >= candidate.probability))
+      && new Set(reply.sam.actor_top.map(candidate => candidate.action)).size === 3,
+      "invalid native SAM actor candidate record");
     check(ACTIONS.includes(event.action) && ["COMMAND", "FIGHT", "TARGET_SELECT", "MESSAGE", "CONFIRM"].includes(event.ui),
       "invalid policy action or observed UI state");
     const ack = event.ack;

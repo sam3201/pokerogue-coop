@@ -59,11 +59,14 @@ async function firstGuestTurnPhysical(guest: Client, log: string[]): Promise<voi
         phase: c.phase as { name: string; wave: number; turn: number } | null,
         desync: c.desync as string | null,
         own: (c.pace?.private ?? true) as boolean,
-        checkpoint: (c.checkpoints as Array<{ kind: string }>).filter(x => x.kind === "turn").length >= 2\n          || (c.checkpoints as Array<{ kind: string }>).some(x => x.kind === "waveEnd" || x.kind === "rewards"),
+        checkpoint: (c.checkpoints as Array<{ kind: string }>).filter(x => x.kind === "turn").length >= 2
+          || (c.checkpoints as Array<{ kind: string }>).some(x => x.kind === "waveEnd" || x.kind === "rewards"),
       };
     });
     if (state.desync !== null) throw new Error(`guest desync ${state.desync}`);
-    // The first "turn" checkpoint is at TurnInitPhase (BEFORE any command).\n    // A second turn or wave-end checkpoint proves the previous turn advanced.\n    if (state.checkpoint && seen.has("COMMAND") && seen.has("FIGHT")) return true;
+    // The first "turn" checkpoint is at TurnInitPhase (BEFORE any command).
+    // A second turn or wave-end checkpoint proves the previous turn advanced.
+    if (state.checkpoint && seen.has("COMMAND") && seen.has("FIGHT")) return true;
     if (state.phase?.name === "GameOverPhase") throw new Error("game over before first turn");
     // A single move's input should go through CommandPhase -> Fight -> target;
     // the active browser UI, not a privileged API, handles all legality.
@@ -101,7 +104,8 @@ test("guest's real keyboard selects starter and completes one sequenced battle t
     await untilWaveOne(host, guest);
     await Promise.all([
       playUntil(host, "host accepted first battle turn", async () =>
-        (await checkpointsOf(host)).filter(c => c.kind === "turn").length >= 2\n          || (await checkpointsOf(host)).some(c => c.kind === "waveEnd" || c.kind === "rewards"), 540_000),
+        (await checkpointsOf(host)).filter(c => c.kind === "turn").length >= 2
+          || (await checkpointsOf(host)).some(c => c.kind === "waveEnd" || c.kind === "rewards"), 540_000),
       firstGuestTurnPhysical(guest, physicalActions),
     ]);
     const [a, b] = await Promise.all([checkpointsOf(host), checkpointsOf(guest)]);

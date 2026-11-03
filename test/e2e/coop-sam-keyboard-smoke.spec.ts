@@ -48,6 +48,38 @@ async function renderedTitleCursor(page: Page): Promise<"new" | "coop" | "unknow
   }));
 }
 
+/**
+ * Visual acceptance of the three top co-op menu choices on the fixed desktop
+ * 800x450 canvas. Sample only the white cursor arrow, not the option labels.
+ * Observed Y bands from the hosted browser's actual screenshot trace.
+ */
+async function renderedCoopMenuCursor(page: Page): Promise<"host" | "join" | "find" | "unknown"> {
+  return page.evaluate(() => new Promise<"host" | "join" | "find" | "unknown">(resolve => {
+    requestAnimationFrame(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>("#app canvas");
+      if (!canvas) { resolve("unknown"); return; }
+      const probe = document.createElement("canvas");
+      probe.width = 800;
+      probe.height = 450;
+      const ctx = probe.getContext("2d", { willReadFrequently: true });
+      if (!ctx) { resolve("unknown"); return; }
+      ctx.drawImage(canvas, 0, 0, probe.width, probe.height);
+      const pixels = ctx.getImageData(0, 0, probe.width, probe.height).data;
+      const countArrow = (startY: number, endY: number): number => {
+        let count = 0;
+        for (let y = startY; y < endY; y++) for (let x = 508; x < 528; x++) {
+          const i = (y * 800 + x) * 4;
+          if (pixels[i]! > 175 && pixels[i + 1]! > 175 && pixels[i + 2]! > 175) count++;
+        }
+        return count;
+      };
+      const counts = [countArrow(120, 145), countArrow(153, 179), countArrow(186, 212)];
+      const selected = counts.findIndex((n, i) => n > 75 && counts.every((other, j) => j === i || other < 40));
+      resolve((["host", "join", "find"] as const)[selected] ?? "unknown");
+    });
+  }));
+}
+
 /** Never send a select key unless the rendered pointer is at the intended item. */
 test("SAM-compatible physical keys navigate visibly to Co-op before selecting", async ({ browser }) => {
   test.setTimeout(240_000);
@@ -135,9 +167,27 @@ test("external guest joins a private co-op room using real browser input", async
     await guest.page.keyboard.press("z", { delay: 65 });
     await expect.poll(() => ui(guest), { timeout: 30_000 }).toBe("OPTION_SELECT");
 
-    // Co-op menu initial row = Host a game; one Down reaches Join a game.
-    await guest.page.keyboard.press("ArrowDown", { delay: 65 });
-    await guest.page.waitForTimeout(250);
+    // A 65ms Down occasionally skipped past Join and selected Find a partner.
+    // Inspect rendered menu position; correct overshoot and stop after a
+    // bounded number of moves. Never select by a blind key sequence.
+    let joinSelected = false;
+    for (let attempt = 0; attempt < 8 && !joinSelected; attempt++) {
+      const before = await renderedCoopMenuCursor(guest.page);
+      if (before === "join") { joinSelected = true; break; }
+      if (before === "unknown") {
+        await guest.page.waitForTimeout(300);
+        continue;
+      }
+      await guest.page.keyboard.press(before === "host" ? "ArrowDown" : "ArrowUp", { delay: 35 });
+      const deadline = Date.now() + 2500;
+      while (Date.now() < deadline) {
+        const after = await renderedCoopMenuCursor(guest.page);
+        if (after === "join") { joinSelected = true; break; }
+        if (after !== "unknown" && after !== before) break;
+        await guest.page.waitForTimeout(200);
+      }
+    }
+    expect(joinSelected, "rendered cursor did not select Join a game").toBe(true);
     await guest.page.keyboard.press("z", { delay: 65 });
     await expect.poll(() => ui(guest), { timeout: 30_000 }).toBe("COOP_JOIN_FORM");
 

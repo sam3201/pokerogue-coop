@@ -48,9 +48,12 @@ function proof(bytes) {
     decision: {
       key, seq: 11, author: "guest", takeover: false,
       linkedRequestIds: ["rq-command", "rq-fight"],
-      receipts: ["host", "guest"].map(seat => ({
-        seat, kind: "SEQUENCED", seq: 11, author: "guest", key: { ...key },
-      })),
+      receipts: [
+        { seat: "guest", direction: "sent", kind: "PROPOSE", seq: null },
+        { seat: "host", direction: "received", kind: "PROPOSE", seq: null },
+        { seat: "host", direction: "sent", kind: "SEQUENCED", seq: 11 },
+        { seat: "guest", direction: "received", kind: "SEQUENCED", seq: 11 },
+      ].map(r => ({ ...r, author: "guest", takeover: false, key: { ...key } })),
       checkpointBeforeIndex: 1, checkpointAfterIndex: 2,
     },
     checkpoints: { host: checkpoints, guest: structuredClone(checkpoints) },
@@ -113,8 +116,12 @@ describe("SAM co-op guest policy evidence (QA consistency only)", () => {
     assert.throws(() => validate(x => x.decision.seq = 0), /sequencer number/);
     assert.throws(() => validate(x => x.decision.author = "host"), /wrong seat/);
     assert.throws(() => validate(x => x.decision.takeover = true), /wrong seat or takeover/);
-    assert.throws(() => validate(x => x.decision.receipts.pop()), /receipts missing/);
-    assert.throws(() => validate(x => x.decision.receipts[0].seq = 12), /receipts missing/);
+    assert.throws(() => validate(x => x.decision.receipts.pop()), /wire receipts missing/);
+    assert.throws(() => validate(x => x.decision.receipts[0].seq = 12), /wire receipts missing/);
+    assert.throws(() => validate(x => x.decision.receipts[0].direction = "received"), /wire receipts missing/);
+    assert.throws(() => validate(x => x.decision.receipts[2].direction = "received"), /wire receipts missing/);
+    assert.throws(() => validate(x => x.decision.receipts[3].author = "host"), /wire receipts missing/);
+    assert.throws(() => validate(x => x.decision.receipts[1].takeover = true), /wire receipts missing/);
     assert.throws(() => validate(x => x.decision.linkedRequestIds = ["rq-command"]), /not causally linked/);
   });
 

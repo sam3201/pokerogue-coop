@@ -95,7 +95,13 @@ describe("SAM co-op guest policy evidence (QA consistency only)", () => {
   it("requires genuine actor-source command and fight inputs", () => {
     assert.throws(() => validate(x => x.events[0].ui = "MESSAGE"), /independent actor-selected/);
     assert.throws(() => validate(x => x.events[1].source = "world-model"), /not proven actor/);
-    assert.throws(() => validate(x => x.events[1].action = "WAIT"), /independent actor-selected/);
+    assert.throws(() => validate(x => {
+      // Keep the acknowledgment consistent so this specifically tests a
+      // policy that never selected a fight move, not an ack mismatch.
+      x.events[1].action = "WAIT";
+      x.events[1].ack.requestedAction = "WAIT";
+      x.events[1].ack.executedAction = "WAIT";
+    }), /independent actor-selected/);
   });
 
   it("rejects sequencer omission, spoofing, takeover and broken request correlation", () => {

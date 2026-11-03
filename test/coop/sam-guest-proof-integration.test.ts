@@ -12,7 +12,7 @@ const testFile = fileURLToPath(new URL("./sam-guest-proof.test.mjs", import.meta
 
 describe("SAM guest proof checker in standard co-op CI", () => {
   it("passes all standalone checker tests, including CLI and tamper cases", () => {
-    const result = spawnSync(process.execPath, ["--test", testFile], {
+    const result = spawnSync(process.execPath, ["--test", "--test-reporter=tap", testFile], {
       encoding: "utf8",
       timeout: 15_000,
       maxBuffer: 1024 * 1024,

@@ -1,0 +1,19 @@
+name: SAM guest policy evidence verifier QA (isolated)
+
+on:
+  push:
+    branches:
+      - qa/sam-guest-proof-gate-20261103
+
+permissions:
+  contents: read
+
+jobs:
+  proof-verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Unit-test synthetic proof and fail-closed rejection cases
+        run: node --test test/coop/sam-guest-proof.test.mjs

@@ -54,6 +54,18 @@ The Pi's **reconstructed** PokéRogue agent source was reviewed without invoking
 
 The source audit is a **feasibility/handoff finding**, not an implemented or executed co-op policy bridge. **No existing Pi/Mac service or policy was started, stopped, trained, modified or copied.**
 
+### Independent redacted proof consistency gate (QA-only)
+
+The proposed test-only `scripts/verify-sam-guest-evidence.mjs` (stacked [draft PR #9](https://github.com/sam3201/pokerogue-coop/pull/9)) accepts **two local files**, never sends model bytes/room tokens to GitHub, and requires no game service:
+
+```sh
+node scripts/verify-sam-guest-evidence.mjs ./redacted-guest-proof.json ./copied-private-actor-v1.json
+```
+
+The first gate is deliberately restricted to `source: actor`, with the actual checkpoint file's SHA-256, `policy_version`, `updates > 0`, 128-feature action weights and nonempty token observation. An evidenced `world-model` selection needs a **separately hashed dynamics model** and a future gate; it must not be falsely attributed to the actor. The proof bundle must correlate unique policy `requestId` values and visual hashes with **applied, unblocked, unremapped real keyboard events** in `COMMAND` and `FIGHT`, guest-authored `TURN_COMMANDS` receipts from host and guest, and a later-than-turn-init checkpoint equal on both clients. The checker rejects claims drawn from scripted QA, fallback `WAIT`, wrong-seat/takeover, duplicates, blocked inputs, hash mismatch, or merely reaching `TurnInitPhase`.
+
+**Security limit:** internally consistent JSON is **not** trusted process attestation. The reviewer must separately validate the real model process identity, live observation capture, browser profile ownership, relay/session receipts and checkpoint origin. Keep raw room join codes, seat tokens, private paths, model weights and screenshots out of published PRs and CI logs. The synthetic Node tests for this verifier establish only that the rejection gate works.
+
 ## Bounded SAM-owned implementation, in order
 
 ### A. Invite-only guest first: one real learned decision

@@ -1,0 +1,21 @@
+name: SAM proof gate co-op suite integration QA (isolated)
+
+on:
+  push:
+    branches:
+      - qa/sam-evidence-suite-integration-20261103
+
+permissions:
+  contents: read
+
+jobs:
+  vitest-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Run policy evidence verifier through normal co-op Vitest config
+        run: pnpm exec vitest run --config vitest.coop.config.ts test/coop/sam-guest-proof-integration.test.ts --reporter=verbose

@@ -1,0 +1,19 @@
+name: SAM directional sequencer evidence QA (isolated)
+
+on:
+  push:
+    branches:
+      - qa/sam-receipt-direction-gate-20261103
+
+permissions:
+  contents: read
+
+jobs:
+  proof-direction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Test directional guest policy proof consistency
+        run: node --test --test-reporter=tap test/coop/sam-guest-proof.test.mjs

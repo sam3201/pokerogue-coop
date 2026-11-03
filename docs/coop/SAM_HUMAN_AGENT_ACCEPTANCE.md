@@ -25,6 +25,10 @@ The passing co-op E2E tests drive `window.__coop.press(...)` in `test/e2e/coop-c
 
 The existing Pi SAM browser bridge `bridge/daemon.js` already sends real keyboard codes: `UP=ArrowUp`, `DOWN=ArrowDown`, `A=KeyZ` (select/advance), `B=KeyX` (cancel), `SELECT=Enter` (starter submit), plus other keys. Those mappings must be **independently smoke-tested against the co-op fork** before the existing agent is adapted. The bridge also has a browser profile and local socket which must not be shared with any live controller. The current `PokemonSAM.decide` writes its own decision/transition telemetry, so read-only diagnostics must avoid invoking it, training, or `status.js` (which calls `ensureModels()`) as though they were pure reads.
 
+### Input acknowledgments are safety-critical
+
+Independent hosted physical-keyboard checks found non-deterministic menu navigation in the software-rendered browser: [run 41577517114](https://github.com/sam3201/pokerogue-coop/actions/runs/41577517114) opened co-op correctly but saw an intermediate cancel `MESSAGE`; [run 41577842058](https://github.com/sam3201/pokerogue-coop/actions/runs/41577842058) returned directly to `TITLE` on cancel; [run 41578086310](https://github.com/sam3201/pokerogue-coop/actions/runs/41578086310) retained the visible cursor on **New Game** after a physical `ArrowDown`, so the subsequent `Z` did **not** open the co-op menu and ended with a `Could not connect.` message. A trace screenshot independently confirmed the missed cursor movement. These are QA observations, **not** proof that a new game or server was modified. The agent adapter must use bounded **observe → act → verify rendered result** steps, never blindly chain `DOWN` then `Z`. Keep key pulses, per-UI cooldown, observed target position and stale-screen rejection in its telemetry. This is an operational acceptance requirement, not privileged game-state information for learning.
+
 ## Bounded SAM-owned implementation, in order
 
 ### A. Invite-only guest first: one real learned decision

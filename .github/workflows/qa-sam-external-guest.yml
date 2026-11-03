@@ -1,0 +1,33 @@
+name: SAM invite-only external guest QA (isolated)
+
+on:
+  push:
+    branches:
+      - qa/sam-external-guest-join-20261102
+
+permissions:
+  contents: read
+
+jobs:
+  keyboard-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source and game submodules
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+        with:
+          submodules: "recursive"
+      - name: Install repository dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Install Chromium and OS dependencies
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run browser-controlled guest room admission and keyboard safety tests
+        run: pnpm exec playwright test test/e2e/coop-sam-keyboard-smoke.spec.ts --project=chromium --workers=1 --reporter=line
+      - name: Save failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sam-external-guest-failure
+          path: test-results/e2e/
+          if-no-files-found: ignore
+          retention-days: 2

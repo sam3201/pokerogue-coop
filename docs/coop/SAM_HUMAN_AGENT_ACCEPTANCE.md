@@ -19,6 +19,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 `docs/coop/ARCHITECTURE.md` describes two complete browser game simulations with a deterministic host sequencer. The Node relay (`coop-server/src/relay-server.ts`) and Cloudflare Worker relay forward frames, maintain room/seat tokens and match clients, but do **not** simulate gameplay. `PROPOSE` / `SEQUENCED` / legality are client-level (`src/coop/sequencer.ts`, `bridge.ts`, `legal.ts`, `legal-view.ts`, `control.ts`). A policy-only WebSocket sender cannot impersonate a full second game client while preserving lockstep. An agent **needs its own real game client**, likely a dedicated browser context initially.
 
+## Production browser input boundary (source-verified)
+
+The passing co-op E2E tests drive `window.__coop.press(...)` in `test/e2e/coop-client.ts`, but `src/coop/debug-api.ts:494-507` installs `window.__coop` **only** in development/test builds (or builds explicitly configured with `VITE_COOP_E2E=1`); a normal production build intentionally exposes no such debug API. **Do not use that API as the production SAM controller.** Reading it to diagnose QA tests is fine, but agent gameplay needs real authenticated browser inputs and a separate observation/decision recording channel.
+
+The existing Pi SAM browser bridge `bridge/daemon.js` already sends real keyboard codes: `UP=ArrowUp`, `DOWN=ArrowDown`, `A=KeyZ` (select/advance), `B=KeyX` (cancel), `SELECT=Enter` (starter submit), plus other keys. Those mappings must be **independently smoke-tested against the co-op fork** before the existing agent is adapted. The bridge also has a browser profile and local socket which must not be shared with any live controller. The current `PokemonSAM.decide` writes its own decision/transition telemetry, so read-only diagnostics must avoid invoking it, training, or `status.js` (which calls `ensureModels()`) as though they were pure reads.
+
 ## Bounded SAM-owned implementation, in order
 
 ### A. Invite-only guest first: one real learned decision

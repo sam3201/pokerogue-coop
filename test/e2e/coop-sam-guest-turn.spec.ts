@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 pokerogue-coop contributors
  * SPDX-License-Identifier: AGPL-3.0-only
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   checkpointsOf, desyncOf, linkClients, newClientContext,
   openClient, pickAndReady, playUntil, ui, untilWaveOne, useRelay, waitForTitle,
@@ -17,6 +17,70 @@ useRelay();
  * room handshake, nor are commands injected into the relay/sequencer.
  * Read-only __coop is exclusively for observing acceptance state.
  */
+/** A minimal, non-secret wire receipt from the relay's existing reliable frames.
+ * Do not store join codes, session tokens, private names, or payload bodies.
+ * The host sequences locally: host SENT / guest RECEIVED is the proof of
+ * distribution, not a fictitious host-received copy of its own message.
+ */
+type WireReceipt = {
+  seat: "host" | "guest";
+  direction: "sent" | "received";
+  kind: "PROPOSE" | "SEQUENCED";
+  key: { wave: number; turn: number; kind: string; ref: number | string };
+  author: "host" | "guest";
+  seq: number | null;
+  takeover: boolean;
+};
+function captureWireReceipts(
+  page: Page, seat: "host" | "guest", records: WireReceipt[],
+): void {
+  page.on("websocket", ws => {
+    const collect = (frame: { payload: string | Buffer }, direction: WireReceipt["direction"]) => {
+      try {
+        const json = JSON.parse(String(frame.payload));
+        // ReliableTransport encodes decision envelopes as {n, b:{kind,...}}.
+        const env = json?.b;
+        const key = env?.key;
+        if ((env?.kind !== "PROPOSE" && env?.kind !== "SEQUENCED")
+          || key?.kind !== "TURN_COMMANDS"
+          || !Number.isInteger(key?.wave) || !Number.isInteger(key?.turn)
+          || (env?.author !== "host" && env?.author !== "guest")) return;
+        records.push({
+          seat, direction, kind: env.kind, author: env.author,
+          key: { wave: key.wave, turn: key.turn, kind: key.kind, ref: key.ref },
+          seq: Number.isInteger(env.seq) ? env.seq : null,
+          takeover: env.takeover === true,
+        });
+      } catch {
+        // Relay may carry ACKs/control messages; never process them as proof.
+      }
+    };
+    ws.on("framesent", frame => collect(frame, "sent"));
+    ws.on("framereceived", frame => collect(frame, "received"));
+  });
+}
+function guestCommandReceipts(wire: WireReceipt[]): WireReceipt[] {
+  const found: WireReceipt[] = [];
+  const sameKey = (a: WireReceipt, b: WireReceipt) =>
+    a.key.wave === b.key.wave && a.key.turn === b.key.turn
+    && a.key.kind === b.key.kind && String(a.key.ref) === String(b.key.ref);
+  const matching = (example: WireReceipt, seat: WireReceipt["seat"],
+    direction: WireReceipt["direction"], kind: WireReceipt["kind"]) =>
+    wire.some(item => item.seat === seat && item.direction === direction
+      && item.kind === kind && item.author === "guest"
+      && !item.takeover && sameKey(item, example)
+      && (kind === "PROPOSE" || item.seq === example.seq));
+  for (const receipt of wire) {
+    if (receipt.kind !== "SEQUENCED" || receipt.seat !== "guest"
+      || receipt.direction !== "received" || receipt.author !== "guest"
+      || receipt.takeover || receipt.seq === null || receipt.seq < 1) continue;
+    if (matching(receipt, "guest", "sent", "PROPOSE")
+      && matching(receipt, "host", "received", "PROPOSE")
+      && matching(receipt, "host", "sent", "SEQUENCED")) found.push(receipt);
+  }
+  return found;
+}
+
 async function physicalReady(guest: Client): Promise<string[]> {
   const log: string[] = [];
   await expect.poll(() => ui(guest), { timeout: 60_000 }).toBe("STARTER_SELECT");
@@ -119,6 +183,9 @@ test("guest's real keyboard selects starter and completes one sequenced battle t
     openClient(guestContext, "guest-physical-keyboard"),
   ]);
   const physicalActions: string[] = [];
+  const wireReceipts: WireReceipt[] = [];
+  captureWireReceipts(host.page, "host", wireReceipts);
+  captureWireReceipts(guest.page, "guest", wireReceipts);
   try {
     await Promise.all([waitForTitle(host), waitForTitle(guest)]);
     // The separate PR #9 test already proves real guest invitation by physical
@@ -137,6 +204,19 @@ test("guest's real keyboard selects starter and completes one sequenced battle t
     expect(a.map(c => c.kind)).toContain("waveStart");
     expect(a.map(c => c.kind)).toContain("turn");
     expect(b).toEqual(a);
+    // Assert actual relay-frame provenance: guest physical commands reached
+    // the host as PROPOSE, then host emitted SEQUENCED and guest received it.
+    // Matching state hashes alone cannot establish this causal chain.
+    const completeReceipts = guestCommandReceipts(wireReceipts);
+    expect(completeReceipts.length,
+      "no complete guest PROPOSE -> host SEQUENCED -> guest receipt chain").toBeGreaterThan(0);
+    await testInfo.attach("guest-sequencer-receipts.json", {
+      body: JSON.stringify(completeReceipts.map(r => ({
+        kind: r.key.kind, wave: r.key.wave, turn: r.key.turn,
+        ref: r.key.ref, seq: r.seq, author: r.author, takeover: r.takeover,
+      })), null, 2),
+      contentType: "application/json",
+    });
     expect(await desyncOf(host)).toBeNull();
     expect(await desyncOf(guest)).toBeNull();
     await testInfo.attach("guest-physical-actions.json", {

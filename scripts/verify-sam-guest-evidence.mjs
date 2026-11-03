@@ -108,12 +108,22 @@ export function verifySamGuestEvidence(evidence, actorFileBytes) {
     && decision.linkedRequestIds.includes(fight.requestId)
     && decision.linkedRequestIds.every(x => ids.has(x)),
     "sequenced decision not causally linked to actor inputs");
-  check(Array.isArray(decision.receipts) && decision.receipts.length === 2
-    && ["host", "guest"].every(seat =>
-      decision.receipts.some(r => object(r) && r.seat === seat && r.kind === "SEQUENCED"
-        && r.author === "guest" && r.seq === decision.seq
-        && JSON.stringify(r.key) === JSON.stringify(decision.key))),
-    "matching host and guest SEQUENCED receipts missing");
+  // The host assigns its own seq; it SENDS the decision to the guest.
+  // A report claiming the host RECEIVED its own SEQUENCED frame is not valid
+  // wire evidence. Require all four distinct, directionally accurate steps.
+  const requiredWire = [
+    { seat: "guest", direction: "sent", kind: "PROPOSE", seq: null },
+    { seat: "host", direction: "received", kind: "PROPOSE", seq: null },
+    { seat: "host", direction: "sent", kind: "SEQUENCED", seq: decision.seq },
+    { seat: "guest", direction: "received", kind: "SEQUENCED", seq: decision.seq },
+  ];
+  check(Array.isArray(decision.receipts) && decision.receipts.length === requiredWire.length
+    && requiredWire.every(expected => decision.receipts.some(r =>
+      object(r) && r.seat === expected.seat && r.direction === expected.direction
+      && r.kind === expected.kind && (r.seq ?? null) === expected.seq
+      && r.author === "guest" && r.takeover === false
+      && JSON.stringify(r.key) === JSON.stringify(decision.key))),
+    "complete directional guest PROPOSE/SEQUENCED wire receipts missing");
 
   const cps = evidence.checkpoints;
   check(object(cps) && Array.isArray(cps.host) && Array.isArray(cps.guest)

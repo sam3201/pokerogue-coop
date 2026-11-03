@@ -42,8 +42,33 @@ async function physicalReady(guest: Client): Promise<string[]> {
   };
   await pressToMode("STARTER_SELECT", "OPTION_SELECT", "z");
   await pressToMode("OPTION_SELECT", "STARTER_SELECT", "z");
-  await guest.page.waitForTimeout(400);
-  await pressToMode("STARTER_SELECT", "CONFIRM", "Enter");
+  await guest.page.waitForTimeout(1500);
+  // Hosted SwiftShader can leave a deferred Pokémon option modal open after
+  // the "Add to party" callback, even though STARTER_SELECT was observed.
+  // Never select that modal blindly; cancel it and verify before retrying.
+  let readyPrompt = false;
+  for (let attempt = 0; attempt < 3 && !readyPrompt; attempt++) {
+    await expect.poll(() => ui(guest), { timeout: 60_000 }).toBe("STARTER_SELECT");
+    log.push(`STARTER_SELECT -> CONFIRM: Enter attempt ${attempt + 1}`);
+    await guest.page.keyboard.press("Enter", { delay: 65 });
+    try {
+      await expect.poll(() => ui(guest), { timeout: 30_000, intervals: [250] }).toBe("CONFIRM");
+      readyPrompt = true;
+    } catch {
+      const mode = await ui(guest);
+      const options = await guest.page.evaluate(() => (window as any).__coop.menuOptions as string[]);
+      log.push(`ready Enter produced ${mode} options=${JSON.stringify(options)}`);
+      if (mode === "OPTION_SELECT") {
+        // Cancel only: an options dialog must not be mistaken for Ready Yes.
+        await guest.page.keyboard.press("x", { delay: 65 });
+        await expect.poll(() => ui(guest), { timeout: 30_000 }).toBe("STARTER_SELECT");
+        await guest.page.waitForTimeout(700);
+      } else if (mode !== "STARTER_SELECT") {
+        throw new Error(`unexpected guest ready result ${mode}, options=${JSON.stringify(options)}`);
+      }
+    }
+  }
+  expect(readyPrompt, `real keyboard never reached starter confirmation: ${log.join("; ")}`).toBe(true);
   await pressToMode("CONFIRM", "STARTER_SELECT", "z");
   return log;
 }

@@ -1,0 +1,19 @@
+name: SAM native worker evidence acceptance QA (isolated)
+
+on:
+  push:
+    branches:
+      - qa/sam-raw-worker-response-proof-20261103
+
+permissions:
+  contents: read
+
+jobs:
+  native-worker-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Run native JSONL attribution negative tests
+        run: node --test --test-reporter=tap test/coop/sam-guest-proof.test.mjs

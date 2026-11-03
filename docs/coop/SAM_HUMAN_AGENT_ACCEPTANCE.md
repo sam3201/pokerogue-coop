@@ -53,6 +53,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 ## Owner/resource gate
 
-As verified by read-only Mac/Pi checks, the Mac Continuer had **67 worker pending and 163 supervisor pending**, while the Pi was under heavy load (~7.6) with ~3.2GB available on its root and ~60GB on the external data mount. **Mac/Pi merger remains the user's top priority.** Do not queue duplicate work or start another browser/model under these constraints. Resume SAM-authored code only through its approved isolated worker after merger/ownership and compute gates clear.
+As indicated by read-only host checks, the existing owner-supervised worker queues are congested and the host is under material compute/storage pressure. Preserve current live resource reservations; remeasure before scheduling. **Mac/Pi merger remains the user's top priority.** Do not queue duplicate work or start another browser/model under these constraints. Resume SAM-authored code only through its approved isolated worker after merger/ownership and compute gates clear.
 
 This contract's review/merge is **not** acceptance of the feature itself. Implementation and evaluation must be evidenced separately.

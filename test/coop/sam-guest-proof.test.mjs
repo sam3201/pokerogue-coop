@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { verifySamGuestEvidence } from "../../scripts/verify-sam-guest-evidence.mjs";
@@ -124,6 +129,29 @@ describe("SAM co-op guest policy evidence (QA consistency only)", () => {
       x.checkpoints.host[2] = { ...x.checkpoints.host[2], turn: 1 };
       x.checkpoints.guest = structuredClone(x.checkpoints.host);
     }), /turn-start checkpoint/);
+  });
+
+  it("executes the portable CLI and rejects an inconsistent proof", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sam-coop-proof-"));
+    const modelPath = join(dir, "actor-v1.json");
+    const tracePath = join(dir, "proof.json");
+    const cli = fileURLToPath(new URL("../../scripts/verify-sam-guest-evidence.mjs", import.meta.url));
+    try {
+      const model = actorBytes();
+      writeFileSync(modelPath, model);
+      const input = proof(model);
+      writeFileSync(tracePath, JSON.stringify(input));
+      const good = spawnSync(process.execPath, [cli, tracePath, modelPath], { encoding: "utf8" });
+      assert.equal(good.status, 0, good.stderr);
+      assert.equal(JSON.parse(good.stdout).consistent, true);
+      input.events[1].ack.blocked = true;
+      writeFileSync(tracePath, JSON.stringify(input));
+      const bad = spawnSync(process.execPath, [cli, tracePath, modelPath], { encoding: "utf8" });
+      assert.equal(bad.status, 1);
+      assert.match(bad.stderr, /SAM guest evidence FAILED/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("rejects raw response without verified browser scope", () => {

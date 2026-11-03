@@ -261,6 +261,7 @@ describe("StarterLobby and the checkpoint exchange on a link", () => {
     expect(startedAtGuest[0]).toEqual(startedAtHost[0]);
     expect(startedAtHost[0]).toEqual({
       runSeed: "run-seed",
+      rewardPriority: "host",
       starters: { host: [starter(1)], guest: [starter(4), starter(7)] },
       snapshots: { host: account(1), guest: account(2) },
       timedEvents: [],

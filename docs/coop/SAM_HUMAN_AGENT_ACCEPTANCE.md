@@ -30,6 +30,10 @@ The existing Pi SAM browser bridge `bridge/daemon.js` already sends real keyboar
 
 Independent hosted physical-keyboard checks found non-deterministic menu navigation in the software-rendered browser: [run 41577517114](https://github.com/sam3201/pokerogue-coop/actions/runs/41577517114) opened co-op correctly but saw an intermediate cancel `MESSAGE`; [run 41577842058](https://github.com/sam3201/pokerogue-coop/actions/runs/41577842058) returned directly to `TITLE` on cancel; [run 41578086310](https://github.com/sam3201/pokerogue-coop/actions/runs/41578086310) retained the visible cursor on **New Game** after a physical `ArrowDown`, so the subsequent `Z` did **not** open the co-op menu and ended with a `Could not connect.` message. A trace screenshot independently confirmed the missed cursor movement. These are QA observations, **not** proof that a new game or server was modified. The agent adapter must use bounded **observe → act → verify rendered result** steps, never blindly chain `DOWN` then `Z`. Keep key pulses, per-UI cooldown, observed target position and stale-screen rejection in its telemetry. This is an operational acceptance requirement, not privileged game-state information for learning.
 
+### Checkpoint provenance: turn start is not a completed move
+
+`src/coop/checkpoint-log.ts` defines the `turn` checkpoint at **`TurnInitPhase.start`**, before the game asks its clients for `TURN_COMMANDS`. Therefore **one `turn` checkpoint, even if both hashes match, is not evidence that the guest chose a move or that the host sequenced it**. A genuine first-action acceptance needs an action provenance record plus the accepted sequenced decision and subsequent progress (second turn checkpoint, `waveEnd` or `rewards`) with matching checkpoint hashes and no desync. The first hosted physical-turn QA deliberately failed when it asserted an early turn hash and found no guest `COMMAND` input. Do not loosen this requirement to make hosted tests green.
+
 ## Bounded SAM-owned implementation, in order
 
 ### A. Invite-only guest first: one real learned decision

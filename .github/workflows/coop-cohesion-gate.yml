@@ -1,0 +1,47 @@
+name: Co-op Cohesive Integration Gate
+
+on:
+  push:
+    branches:
+      - integration/coop-cohesion-20261103
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cohesion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protocol-and-game:
+    name: Co-op protocol and gameplay tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout with required submodules
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Test co-op Node and gameplay suites
+        run: pnpm test:coop
+
+  typecheck-and-build:
+    name: Typecheck and build integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout with required submodules
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Typecheck game and co-op relay
+        run: |
+          pnpm exec tsc --noEmit --pretty false
+          pnpm typecheck:coop-server
+      - name: Build application
+        run: pnpm build

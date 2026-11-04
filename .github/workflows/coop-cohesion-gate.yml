@@ -44,4 +44,6 @@ jobs:
           pnpm exec tsc --noEmit --pretty false
           pnpm typecheck:coop-server
       - name: Build application
+        env:
+          VITE_SOURCE_URL: https://github.com/sam3201/pokerogue-coop
         run: pnpm build

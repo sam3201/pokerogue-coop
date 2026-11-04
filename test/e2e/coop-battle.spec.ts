@@ -32,8 +32,9 @@ test.describe("co-op: two clients play wave 1 together", () => {
     browser,
   }, testInfo) => {
     test.setTimeout(900_000);
-    const hostContext = await newClientContext(browser);
-    const guestContext = await newClientContext(browser);
+    // QA-only: use the existing fast client settings to reduce hosted SwiftShader text-render latency.
+    const hostContext = await newClientContext(browser, true);
+    const guestContext = await newClientContext(browser, true);
     const [host, guest] = await Promise.all([openClient(hostContext, "host"), openClient(guestContext, "guest")]);
 
     try {
@@ -41,7 +42,8 @@ test.describe("co-op: two clients play wave 1 together", () => {
 
       await startLinkedRun(host, guest);
 
-      await Promise.all([playToRewardScreen(host), playToRewardScreen(guest)]);
+      // QA-only hosted runner: Phaser software rendering may need longer than the 5-minute helper deadline.
+      await Promise.all([playToRewardScreen(host, null, 600_000), playToRewardScreen(guest, null, 600_000)]);
 
       // Same checkpoints, same hashes, in the same order; the last is the reward option list
       const [a, b] = await Promise.all([checkpointsOf(host), checkpointsOf(guest)]);

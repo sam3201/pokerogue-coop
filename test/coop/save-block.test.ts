@@ -221,7 +221,7 @@ describe("the session and its save block", () => {
     session.restoreFromSaveBlock(block({ rewardPriority: "alternate", rewardPickCount: 2 }));
     expect(session.rewardPriority).toBe("alternate");
     expect(session.beginRewardScreen()).toEqual({ index: 2, picker: "host" });
-    session.restoreFromSaveBlock(block({ rewardPriority: undefined, rewardPickCount: 1 }));
+    session.restoreFromSaveBlock(block({ rewardPickCount: 1 }));
     expect(session.rewardPriority).toBe("alternate");
     expect(session.beginRewardScreen()).toEqual({ index: 1, picker: "guest" });
   });

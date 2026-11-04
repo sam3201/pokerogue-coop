@@ -1,0 +1,33 @@
+name: Integrated co-op guest browser acceptance (isolated)
+
+on:
+  push:
+    branches:
+      - qa/cohesion-browser-acceptance-20261103
+
+permissions:
+  contents: read
+
+jobs:
+  physical-turn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout source/submodules
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: "recursive"
+      - name: Install repository dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Install Chromium and OS dependencies
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run physical guest action and wire-level sequencer evidence
+        run: pnpm exec playwright test test/e2e/coop-sam-guest-turn.spec.ts --project=chromium --workers=1 --reporter=line
+      - name: Save failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cohesion-browser-failure
+          path: test-results/e2e/
+          if-no-files-found: ignore
+          retention-days: 2

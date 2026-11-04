@@ -8,7 +8,8 @@ import { speciesDataRegistry } from "#app/global-species-data-registry";
 import { activeOverrides } from "#app/overrides";
 import { Phase } from "#app/phase";
 import { bypassLogin } from "#constants/app-constants";
-import { type CoopTitleCallbacks, createCoopTitleOption } from "#coop/lobby";
+import { directCoopEntryRequested } from "#coop/direct-entry";
+import { type CoopTitleCallbacks, createCoopTitleOption, showCoopTitleMenu } from "#coop/lobby";
 import { startPlayAgain } from "#coop/play-again";
 import { tryAutoRejoin } from "#coop/rejoin";
 import { offerSaveBackup } from "#coop/save-backup-offer";
@@ -31,6 +32,8 @@ import { isLocalServerConnected } from "#utils/common";
 import i18next from "i18next";
 
 const NO_SAVE_SLOT = -1;
+/** Each page load may auto-open the co-op menu only once; Cancel restores the regular title. */
+let directCoopEntryConsumed = false;
 
 export class TitlePhase extends Phase {
   public readonly phaseName = "TitlePhase";
@@ -214,6 +217,15 @@ export class TitlePhase extends Phase {
     options.splice(newGameAt + 1, 0, coopOption);
     const config: OptionSelectModeConfig = { options, blockCancelButton: true };
     await ui.setMode(UiMode.TITLE, config);
+    // The homepage's ?coop=1 link opens co-op first, without joining a room or seizing a bot seat.
+    if (
+      !directCoopEntryConsumed
+      && typeof window !== "undefined"
+      && directCoopEntryRequested(window.location.search, window.location)
+    ) {
+      directCoopEntryConsumed = true;
+      showCoopTitleMenu(this.coopCallbacks());
+    }
   }
 
   /** What the co-op lobby does once connected (to the starter select), or when cancelled (back to the title) */

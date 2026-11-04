@@ -29,7 +29,7 @@ const observation = (): CaptureObservation => ({
   masterBallApproved: false,
 });
 
-const catchIntent = (replace: number | null = null): CaptureProposal => ({
+const catchIntent = (replace: number | null = null): Extract<CaptureProposal, { action: "catch" }> => ({
   action: "catch",
   source: "JevBot-v9-capture-lesson",
   targetIndex: 3,

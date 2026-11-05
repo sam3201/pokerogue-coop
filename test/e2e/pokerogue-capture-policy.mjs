@@ -76,6 +76,7 @@ export async function readCaptureSnapshot(client, seat) {
   return client.page.evaluate(async mySeat => {
     if (window.__coop?.ui !== "COMMAND") return null;
     const {globalScene} = await import(/* @vite-ignore */ "/src/globals/global-scene.ts");
+    const {BiomeId} = await import(/* @vite-ignore */ "/src/enums/biome-id.ts");
     const battle = globalScene.currentBattle;
     const gameData = globalScene.gameData;
     if (!battle || !gameData || !globalScene.pokeballCounts) return null;
@@ -93,7 +94,7 @@ export async function readCaptureSnapshot(client, seat) {
       battleType:Number(battle.battleType),
       specialBattle:Boolean(battle.isBattleMysteryEncounter?.()
         || globalScene.gameMode.isBattleClassicFinalBoss?.(battle.waveIndex)
-        || globalScene.arena?.biomeId === 21 /* conservative End biome check below */),
+        || globalScene.arena?.biomeId === BiomeId.END),
       isChallenge:Boolean(globalScene.gameMode.hasAnyChallenges?.()),
       enemies,ballCounts:[0,1,2,3,4].map(x=>Number(globalScene.pokeballCounts[x]??0)),
     };
@@ -141,9 +142,8 @@ export async function requestCapture(client, seat, proposal) {
   await guardedButton(client,"COMMAND","ACTION");
   if(await client.page.evaluate(()=>window.__coop?.ui)!=="BALL")
     throw new Error("BALL menu did not open");
-  const updated=await readCaptureSnapshot(client,seat);
-  // readCaptureSnapshot is only available on COMMAND. The pending decision
-  // was already validated before opening BALL. Revalidate real inventory.
+  // The pending decision was validated on COMMAND. Recheck inventory
+  // on the BALL screen before issuing the irreversible throw.
   const liveCounts=await client.page.evaluate(async()=>{
     const {globalScene}=await import(/* @vite-ignore */ "/src/globals/global-scene.ts");
     return [0,1,2,3,4].map(i=>Number(globalScene.pokeballCounts[i]??0));
@@ -184,4 +184,25 @@ export function observeCaptureOutcome(before, after, {saveConfirmed=false}={}) {
     eligibleAfterConfirmedSave:Boolean(newlyCaught && saveConfirmed),
     source:"observed-dex-transition", // no invented completion
   };
+}
+
+/** Read the currently loaded player's authoritative dex without modifying it. */
+export async function readCaptureDexSnapshot(client, seat, speciesIds) {
+  if(!SEATS.has(seat) || !Array.isArray(speciesIds) || speciesIds.length>16
+    || speciesIds.some(x=>!positiveInt(x)))throw new Error("invalid dex read");
+  return client.page.evaluate(async ({seat:player,ids})=>{
+    const {globalScene}=await import(/* @vite-ignore */ "/src/globals/global-scene.ts");
+    const dex=globalScene.gameData?.dexData;
+    if(!dex)throw new Error("player dex not available");
+    return {source:"loaded-game-dex",seat:player,
+      entries:ids.map(speciesId=>{
+        const entry=dex[speciesId];
+        return {
+          speciesId,
+          caughtAttr:String(entry?.caughtAttr??0n),
+          caughtCount:Number(entry?.caughtCount??0),
+        };
+      })
+    };
+  },{seat,ids:speciesIds});
 }

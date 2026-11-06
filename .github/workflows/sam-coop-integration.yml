@@ -1,0 +1,49 @@
+name: SAM co-op integration (isolated)
+on:
+  push:
+    branches:
+      - feature/sam-autonomous-coop-20261103
+  pull_request:
+    branches:
+      - coop
+    paths:
+      - "test/e2e/pokerogue-*.mjs"
+      - "test/e2e/test-pokerogue-*.mjs"
+      - "test/e2e/coop-autonomous-starters.spec.ts"
+      - "test/e2e/coop-capture-restart.spec.ts"
+      - ".github/workflows/sam-coop-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sam-coop-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-policy-contracts:
+    name: Local co-op policy and save contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check module parsing
+        run: |
+          node --check test/e2e/pokerogue-starter-policy.mjs
+          node --check test/e2e/pokerogue-starter-browser.mjs
+          node --check test/e2e/pokerogue-seat-state.mjs
+          node --check test/e2e/pokerogue-capture-policy.mjs
+      - name: Verify starter, capture and save contracts
+        run: |
+          node --test \
+            test/e2e/test-pokerogue-starter-policy.mjs \
+            test/e2e/test-pokerogue-capture-policy.mjs \
+            test/e2e/test-pokerogue-seat-state.mjs
+      # Browser E2E is intentionally separate: it requires real local game
+      # accounts/saves and a running relay. Do not pass synthetic unlocks here.

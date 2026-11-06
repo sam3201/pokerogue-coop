@@ -62,6 +62,15 @@ export async function moveStarterCursor(client, target, press) {
   if (last.gridIndex !== target) throw new Error("starter navigation did not reach selected grid index");
 }
 
+/** Accept a confirmed return to starter UI or an actual battle-mode transition.
+ * A wave index alone is insufficient: CONFIRM may already report wave one.
+ */
+export function starterReadyTransitionObserved(state) {
+  return !!state && (state.ui === "STARTER_SELECT"
+    || (Number.isSafeInteger(state.wave) && state.wave >= 1
+      && ["COMMAND", "FIGHT", "TARGET_SELECT"].includes(state.ui)));
+}
+
 async function chooseAndReady(client, seat, selection, api) {
   await moveStarterCursor(client, selection.gridIndex, api.press);
   const fresh = await readStarterScreen(client, seat);
@@ -81,16 +90,17 @@ async function chooseAndReady(client, seat, selection, api) {
   }
   if (!submitted) throw new Error("game rejected ready/submit");
   await api.expectConfirm(client);
-  // The second player becoming ready may start wave one immediately. Requiring
-  // the transient STARTER_SELECT screen would reject a legitimate co-op start.
-  await api.press(client, "ACTION");
+  // The other player may already have started the run. Never press ACTION on
+  // COMMAND accidentally: that would select a battle action, not confirm ready.
+  const readyMode = await client.page.evaluate(() => window.__coop?.ui ?? "");
+  if (readyMode === "CONFIRM") await api.press(client, "ACTION");
   let accepted = false;
   for (let attempt = 0; attempt < 80; attempt++) {
     const state = await client.page.evaluate(() => ({
       ui: window.__coop?.ui ?? "",
       wave: Number(window.__coop?.phase?.wave ?? 0),
     }));
-    if (state.ui === "STARTER_SELECT" || state.wave >= 1) {
+    if (starterReadyTransitionObserved(state)) {
       accepted = true;
       break;
     }

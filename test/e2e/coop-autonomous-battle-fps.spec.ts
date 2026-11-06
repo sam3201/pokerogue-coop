@@ -110,6 +110,8 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
       // throttle rAF. The target is a real, bounded battle *observation*.
       // Full-wave/reward completion remains a separate acceptance gate.
       await host.page.bringToFront();
+      const initialHostInputs = host.presses.length;
+      const initialGuestInputs = guest.presses.length;
       const observeUntil = Date.now() + 25_000;
       const sampling = sampleBrowserFrames(host.page, 8000);
       const progress = Promise.all([
@@ -139,8 +141,8 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
       expect(await desyncOf(guest)).toBeNull();
       // These are submitted player button inputs; the game is authoritative
       // for acceptance and we do not promote inputs to learned reward labels.
-      expect(host.presses.length).toBeGreaterThan(0);
-      expect(guest.presses.length).toBeGreaterThan(0);
+      expect(host.presses.length).toBeGreaterThan(initialHostInputs);
+      expect(guest.presses.length).toBeGreaterThan(initialGuestInputs);
 
       expect(frames.frameCount).toBeGreaterThanOrEqual(2);
       expect(frames.canvasCount).toBeGreaterThan(0);
@@ -150,8 +152,8 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
         environment: "hosted-headless-chromium-not-user-mac",
         frames,
         starterPlanVerified: starterPlan.verifiedInGame,
-        hostSubmittedInputs: host.presses.length,
-        guestSubmittedInputs: guest.presses.length,
+        hostSubmittedInputs: host.presses.length - initialHostInputs,
+        guestSubmittedInputs: guest.presses.length - initialGuestInputs,
         commonSynchronizedCheckpoints: matchedCheckpoints.length,
         sampleEndScreens: screens,
         zeroReportedDesync: true,

@@ -81,7 +81,24 @@ async function chooseAndReady(client, seat, selection, api) {
   }
   if (!submitted) throw new Error("game rejected ready/submit");
   await api.expectConfirm(client);
-  await api.pressUntil(client, "ACTION", "STARTER_SELECT");
+  // The second player becoming ready may start wave one immediately. Requiring
+  // the transient STARTER_SELECT screen would reject a legitimate co-op start.
+  await api.press(client, "ACTION");
+  let accepted = false;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const state = await client.page.evaluate(() => ({
+      ui: window.__coop?.ui ?? "",
+      wave: Number(window.__coop?.phase?.wave ?? 0),
+    }));
+    if (state.ui === "STARTER_SELECT" || state.wave >= 1) {
+      accepted = true;
+      break;
+    }
+    if (state.ui === "CONFIRM" && attempt > 0 && attempt % 12 === 0)
+      await api.press(client, "ACTION");
+    await client.page.waitForTimeout(250);
+  }
+  if (!accepted) throw new Error("starter confirmation neither returned nor started the run");
   return {speciesId: selection.speciesId, gamePartyAcknowledged: true};
 }
 

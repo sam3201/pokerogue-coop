@@ -83,6 +83,46 @@ async function sampleBrowserFrames(page: import("@playwright/test").Page, ms: nu
   }, ms);
 }
 
+
+/** Read current game UI readiness without exposing or modifying text content.
+ * Distinguish an unfinished typewriter animation from a prompt that accepts ACTION.
+ * This is diagnostic evidence, not a means of forcing the game to advance.
+ */
+async function readPromptProgress(page: import("@playwright/test").Page) {
+  return page.evaluate(async () => {
+    const {globalScene} = await import(/* @vite-ignore */ "/src/globals/global-scene.ts");
+    const coop = (window as any).__coop;
+    const handler: any = globalScene?.ui?.getHandler?.();
+    const pace = coop?.pace ?? null;
+    return {
+      ui: coop?.ui ?? null,
+      phase: coop?.phase?.name ?? null,
+      wave: coop?.phase?.wave ?? null,
+      turn: coop?.phase?.turn ?? null,
+      prompt: {
+        awaitingActionInput: typeof handler?.awaitingActionInput === "boolean"
+          ? handler.awaitingActionInput : null,
+        pendingPrompt: typeof handler?.pendingPrompt === "boolean"
+          ? handler.pendingPrompt : null,
+        textCharactersVisible: typeof handler?.message?.text === "string"
+          ? handler.message.text.length : null,
+        textTimerActive: handler?.textTimer?.paused === false
+          && handler?.textTimer?.hasDispatched !== true,
+        textTimerRepeatCount: typeof handler?.textTimer?.repeatCount === "number"
+          ? handler.textTimer.repeatCount : null,
+      },
+      pacing: pace && {
+        privateLine: pace.private ?? null,
+        behindHost: pace.behind ?? null,
+        promptOpen: pace.open ?? null,
+        position: pace.position ?? null,
+        leader: pace.leader ?? null,
+        stats: pace.stats ?? null,
+      },
+    };
+  });
+}
+
 test.describe("SAM co-op: bounded early-battle frame and synchronization smoke", () => {
   useRelay();
 
@@ -124,11 +164,7 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
 
       const [hostCheckpoints, guestCheckpoints, screens] = await Promise.all([
         checkpointsOf(host), checkpointsOf(guest),
-        Promise.all([host, guest].map(c => c.page.evaluate(() => ({
-          ui: (window as any).__coop?.ui ?? "",
-          wave: (window as any).__coop?.phase?.wave ?? null,
-          phase: (window as any).__coop?.phase?.name ?? null,
-        })))),
+        Promise.all([host, guest].map(c => readPromptProgress(c.page))),
       ]);
       // In the middle of a wave, the clients may have progressed to
       // different transient phases. Only compare checkpoint hashes already
@@ -136,9 +172,9 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
       const matchedCheckpoints = hostCheckpoints.filter(h =>
         guestCheckpoints.some(g => g.index === h.index && g.kind === h.kind
           && g.hash === h.hash));
-      expect(matchedCheckpoints.length).toBeGreaterThanOrEqual(1);
-      expect(await desyncOf(host)).toBeNull();
-      expect(await desyncOf(guest)).toBeNull();
+      const [hostDesync, guestDesync] = await Promise.all([
+        desyncOf(host), desyncOf(guest),
+      ]);
       // These are submitted player button inputs; the game is authoritative
       // for acceptance and we do not promote inputs to learned reward labels.
       expect(host.presses.length).toBeGreaterThan(initialHostInputs);
@@ -156,7 +192,9 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
         guestSubmittedInputs: guest.presses.length - initialGuestInputs,
         commonSynchronizedCheckpoints: matchedCheckpoints.length,
         sampleEndScreens: screens,
-        zeroReportedDesync: true,
+        zeroReportedDesync: hostDesync === null && guestDesync === null,
+        hostDesync,
+        guestDesync,
         completeWaveOneVerified: screens.every(x =>
           x.phase === "SelectModifierPhase" && x.ui === "MODIFIER_SELECT"),
         userMacGameplayFpsVerified: false,
@@ -166,6 +204,11 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
         contentType: "application/json",
       });
       console.log("SAM_COOP_FRAME_EVIDENCE " + JSON.stringify(evidence));
+      // Record the full observable UI state before a failing assertion so
+      // timeouts and frame stalls remain independently diagnosable.
+      expect(matchedCheckpoints.length).toBeGreaterThanOrEqual(1);
+      expect(hostDesync).toBeNull();
+      expect(guestDesync).toBeNull();
     } finally {
       await Promise.all([hostContext.close(), guestContext.close()]);
     }

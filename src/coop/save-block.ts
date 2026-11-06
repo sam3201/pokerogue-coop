@@ -5,6 +5,7 @@
  */
 
 import { type CoopAccountSnapshot, isCoopAccountSnapshot } from "#coop/account-snapshot";
+import { isRewardPriority, type RewardPriority } from "#coop/owner-rules";
 import { isOwnerRecord } from "#coop/ownership";
 import { isTimedEventNames, type Seat } from "#coop/protocol";
 
@@ -27,8 +28,10 @@ export interface CoopSaveBlock {
   accountIds: Record<Seat, string>;
   /** `pokemon.id -> seat` for the party (D7) */
   owners: Record<string, Seat>;
-  /** Reward screens started so far; the picker alternates with it (D9) */
+  /** Reward screens started so far; explicit synchronized priority determines the picker (D9) */
   rewardPickCount: number;
+  /** Host/guest/alternate reward priority. Missing in legacy alternating saves. */
+  rewardPriority?: RewardPriority;
   /** Trades accepted so far (D11); the owner map above already has their result */
   trades: number;
   /** Both accounts as of run start (D4) */
@@ -77,6 +80,7 @@ export function isCoopSaveBlock(value: unknown): value is CoopSaveBlock {
     && isOwnerRecord(block["owners"])
     && Number.isInteger(block["rewardPickCount"])
     && (block["rewardPickCount"] as number) >= 0
+    && (block["rewardPriority"] === undefined || isRewardPriority(block["rewardPriority"]))
     && Number.isInteger(block["trades"])
     && (block["trades"] as number) >= 0
     && isCoopAccountSnapshot(block["accounts"])

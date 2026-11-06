@@ -159,9 +159,9 @@ describe("Co-op record/replay (D13, D14)", () => {
     for (const d of host.decisions.filter(d => d.key.kind === "TURN_COMMANDS" || d.key.kind === "FAINT_SWITCH")) {
       expect(d.key.turn).toBeGreaterThanOrEqual(1);
     }
-    // the reward screens alternate between the seats, host first
+    // the default host has first choice on every reward screen
     const pickers = host.decisions.filter(d => d.key.kind === "REWARD_PICK").map(d => d.by);
-    expect(pickers).toEqual(pickers.map((_, i) => (i % 2 === 0 ? "host" : "guest")));
+    expect(pickers).toEqual(pickers.map(() => "host"));
     expect(host.decisions.filter(d => d.key.kind === "REWARD_PICK").map(d => d.key.ref)).toEqual(
       pickers.map((_, i) => `${i}`),
     );
@@ -259,10 +259,10 @@ describe("Co-op record/replay (D13, D14)", () => {
 
       const recorded = await playClient(phaserGame, shared, host, Decider.recording(), long);
       expect(recorded.stalledIn).toBeNull();
-      // reward screens alternate (the tenth, twentieth and thirtieth waves have fixed rewards and no screen)
+      // default host priority on each reward screen (X0 waves have fixed rewards and no screen)
       const picks = recorded.decisions.filter(d => d.key.kind === "REWARD_PICK");
       expect(picks).toHaveLength(27);
-      expect(picks.map(d => d.by)).toEqual(picks.map((_, i) => (i % 2 === 0 ? "host" : "guest")));
+      expect(picks.map(d => d.by)).toEqual(picks.map(() => "host"));
       expect(picks.map(d => d.key.ref)).toEqual(picks.map((_, i) => `${i}`));
       // shop buys, by either seat, keyed by the screen and the step (D9)
       expect(recorded.shopBuys).toBeGreaterThanOrEqual(1);

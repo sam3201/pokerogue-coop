@@ -10,6 +10,7 @@ on:
       - "test/e2e/pokerogue-*.mjs"
       - "test/e2e/test-pokerogue-*.mjs"
       - "test/e2e/coop-autonomous-starters.spec.ts"
+      - "test/e2e/coop-autonomous-battle-fps.spec.ts"
       - "test/e2e/coop-capture-restart.spec.ts"
       - ".github/workflows/sam-coop-integration.yml"
   workflow_dispatch:
@@ -71,6 +72,7 @@ jobs:
         run: |
           pnpm exec playwright test \
             test/e2e/coop-autonomous-starters.spec.ts \
+            test/e2e/coop-autonomous-battle-fps.spec.ts \
             --project=chromium --workers=1 --reporter=line
       - name: Retain failure diagnostics only
         if: failure()

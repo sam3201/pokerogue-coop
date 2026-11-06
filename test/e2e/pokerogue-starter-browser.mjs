@@ -62,6 +62,15 @@ export async function moveStarterCursor(client, target, press) {
   if (last.gridIndex !== target) throw new Error("starter navigation did not reach selected grid index");
 }
 
+/** Accept a confirmed return to starter UI or an actual battle-mode transition.
+ * A wave index alone is insufficient: CONFIRM may already report wave one.
+ */
+export function starterReadyTransitionObserved(state) {
+  return !!state && (state.ui === "STARTER_SELECT"
+    || (Number.isSafeInteger(state.wave) && state.wave >= 1
+      && ["COMMAND", "FIGHT", "TARGET_SELECT"].includes(state.ui)));
+}
+
 async function chooseAndReady(client, seat, selection, api) {
   await moveStarterCursor(client, selection.gridIndex, api.press);
   const fresh = await readStarterScreen(client, seat);
@@ -81,7 +90,25 @@ async function chooseAndReady(client, seat, selection, api) {
   }
   if (!submitted) throw new Error("game rejected ready/submit");
   await api.expectConfirm(client);
-  await api.pressUntil(client, "ACTION", "STARTER_SELECT");
+  // The other player may already have started the run. Never press ACTION on
+  // COMMAND accidentally: that would select a battle action, not confirm ready.
+  const readyMode = await client.page.evaluate(() => window.__coop?.ui ?? "");
+  if (readyMode === "CONFIRM") await api.press(client, "ACTION");
+  let accepted = false;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const state = await client.page.evaluate(() => ({
+      ui: window.__coop?.ui ?? "",
+      wave: Number(window.__coop?.phase?.wave ?? 0),
+    }));
+    if (starterReadyTransitionObserved(state)) {
+      accepted = true;
+      break;
+    }
+    if (state.ui === "CONFIRM" && attempt > 0 && attempt % 12 === 0)
+      await api.press(client, "ACTION");
+    await client.page.waitForTimeout(250);
+  }
+  if (!accepted) throw new Error("starter confirmation neither returned nor started the run");
   return {speciesId: selection.speciesId, gamePartyAcknowledged: true};
 }
 

@@ -47,3 +47,34 @@ jobs:
             test/e2e/test-pokerogue-seat-state.mjs
       # Browser E2E is intentionally separate: it requires real local game
       # accounts/saves and a running relay. Do not pass synthetic unlocks here.
+
+
+  clean-checkout-starter-e2e:
+    name: Fresh checkout two-browser starter E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COOP_E2E: "1"
+      CI: "true"
+    steps:
+      - name: Checkout the actual game source and immutable assets
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+        with:
+          submodules: recursive
+      - name: Install exact project dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Install Chromium and its system libraries
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify browser starter selection from a clean checkout
+        run: |
+          pnpm exec playwright test \
+            test/e2e/coop-autonomous-starters.spec.ts \
+            --project=chromium --workers=1 --reporter=line
+      - name: Retain failure diagnostics only
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sam-coop-starter-failure
+          path: test-results/e2e/
+          retention-days: 3
+          if-no-files-found: ignore

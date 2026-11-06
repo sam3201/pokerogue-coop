@@ -44,7 +44,8 @@ jobs:
           node --test \
             test/e2e/test-pokerogue-starter-policy.mjs \
             test/e2e/test-pokerogue-capture-policy.mjs \
-            test/e2e/test-pokerogue-seat-state.mjs
+            test/e2e/test-pokerogue-seat-state.mjs \
+            test/e2e/test-pokerogue-module-integrity.mjs
       # Browser E2E is intentionally separate: it requires real local game
       # accounts/saves and a running relay. Do not pass synthetic unlocks here.
 

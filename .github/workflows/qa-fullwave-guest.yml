@@ -1,0 +1,58 @@
+name: Full-wave and guest-wire cohesion acceptance (isolated)
+
+on:
+  push:
+    branches:
+      - qa/cohesion-fullwave-guest-20261107
+
+permissions:
+  contents: read
+
+jobs:
+  full-wave:
+    name: Two-browser wave-one reward checkpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact integration source and submodules
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+      - name: Install repository dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Install Chromium and OS dependencies
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify entire first wave reaches synchronized rewards
+        run: pnpm exec playwright test test/e2e/coop-battle.spec.ts --project=chromium --workers=1 --reporter=line
+      - name: Retain failure evidence only
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-wave-cohesion-failure
+          path: test-results/e2e/
+          if-no-files-found: ignore
+          retention-days: 2
+
+  guest-turn:
+    name: Physical guest input and sequenced turn
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout exact integration source and submodules
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+      - name: Install repository dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Install Chromium and OS dependencies
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify guest TURN_COMMANDS proposal and host sequencer receipt
+        run: pnpm exec playwright test test/e2e/coop-sam-guest-turn.spec.ts --project=chromium --workers=1 --reporter=line
+      - name: Retain failure evidence only
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: guest-turn-cohesion-failure
+          path: test-results/e2e/
+          if-no-files-found: ignore
+          retention-days: 2

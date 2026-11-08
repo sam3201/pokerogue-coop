@@ -11,6 +11,7 @@ on:
       - "test/e2e/test-pokerogue-*.mjs"
       - "test/e2e/coop-autonomous-starters.spec.ts"
       - "test/e2e/coop-autonomous-battle-fps.spec.ts"
+      - "test/e2e/coop-autonomous-full-wave.spec.ts"
       - "src/coop/text-catchup.ts"
       - "src/ui/handlers/message-ui-handler.ts"
       - "test/e2e/coop-capture-restart.spec.ts"
@@ -77,6 +78,14 @@ jobs:
             test/e2e/coop-autonomous-starters.spec.ts \
             test/e2e/coop-autonomous-battle-fps.spec.ts \
             --project=chromium --workers=1 --reporter=line
+      - name: Validate real game-generated first-wave reward
+        timeout-minutes: 15
+        env:
+          COOP_FULL_WAVE_E2E: "1"
+        run: |
+          pnpm exec playwright test \
+            test/e2e/coop-autonomous-full-wave.spec.ts \
+            --project=chromium --workers=1 --reporter=line --retries=0
       - name: Retain failure diagnostics only
         if: failure()
         uses: actions/upload-artifact@v4

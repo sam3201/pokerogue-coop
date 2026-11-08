@@ -29,7 +29,9 @@ test("does not accept background or unfocused browser frames",()=>{
 test("game must be in a live wave with real attempted inputs and WebGL",()=>{
   for(const change of [
     {waveAtStart:0},{phaseAtStart:"SelectModifierPhase"},
-    {phaseAtStart:"GameOverPhase"},{renderBackend:1},
+    {phaseAtStart:"GameOverPhase"},{phaseAtStart:"TitlePhase"},
+    {phaseAtStart:""},{phaseAtStart:"UNKNOWN"},
+    {renderBackend:1},
     {submittedInputs:0},{canvasCount:0}
   ]){
     const result=assessMacGameplayFrames({...valid(),...change});
@@ -51,7 +53,8 @@ test("rejects nonnumeric frame intervals and malformed sample quantities",()=>{
     {frameIntervalsMs:[16,NaN,18]},
     {frameIntervalsMs:[16,-2,18]},
     {frameIntervalsMs:"fast"},
-    {elapsedMs:0},{elapsedMs:Infinity},{frameCount:3.5}
+    {elapsedMs:0},{elapsedMs:Infinity},{frameCount:3.5},
+    {frameCount:5000},{frameIntervalsMs:[33,33]}
   ]){
     assert.throws(()=>assessMacGameplayFrames({...valid(),...change}),TypeError);
   }
@@ -62,4 +65,7 @@ test("invalid or missing performance samples cannot pass",()=>{
   assert.equal(a.meetsFrameTarget,false);
   const b=assessMacGameplayFrames({...valid(),submittedInputs:undefined});
   assert.equal(b.meetsFrameTarget,false);
+  const c=assessMacGameplayFrames({...valid(),elapsedMs:3000});
+  assert.equal(c.validGameplaySample,false);
+  assert.equal(c.meetsFrameTarget,false);
 });

@@ -86,6 +86,39 @@ jobs:
           pnpm exec playwright test \
             test/e2e/coop-autonomous-full-wave.spec.ts \
             --project=chromium --workers=1 --reporter=line --retries=0
+      - name: Validate published full-wave evidence
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const p = "test-results/acceptance/full-wave-ci.json";
+          const report = JSON.parse(fs.readFileSync(p, "utf8"));
+          const valid = report.acceptance === "passed"
+            && report.verifiedGameRewards === true
+            && report.checkpointEquality === true
+            && report.checkpointCount >= 3
+            && report.hostDesync === null
+            && report.guestDesync === null
+            && report.hostAcceptedButtonSubmissions > 0
+            && report.guestAcceptedButtonSubmissions > 0
+            && report.hostedBrowserOnly === true
+            && report.macGameplayFpsVerified === false
+            && report.userSavesAccessed === false
+            && report.gamePolicyTrainingPerformed === false
+            && report.sourceCommit === process.env.GITHUB_SHA
+            && report.workflowRunId === process.env.GITHUB_RUN_ID;
+          if (!valid) {
+            console.error("Full-wave acceptance report is absent or inconsistent");
+            process.exit(1);
+          }
+          console.log("SAM_COOP_FULL_WAVE_ARTIFACT_OK", report.checkpointCount);
+          NODE
+      - name: Retain verified full-wave handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: sam-coop-full-wave-acceptance
+          path: test-results/acceptance/full-wave-ci.json
+          retention-days: 14
+          if-no-files-found: error
       - name: Retain failure diagnostics only
         if: failure()
         uses: actions/upload-artifact@v4

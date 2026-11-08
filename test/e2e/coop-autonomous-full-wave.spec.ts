@@ -7,6 +7,7 @@
  * rather than bypassing any Phaser phase, battle calculation or player input.
  */
 import { expect, test } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
 import {
   useRelay, newClientContext, openClient, waitForTitle,
   linkClients, press, pressUntil, untilWaveOne, ui,
@@ -113,6 +114,23 @@ test.describe("SAM co-op: full first-wave completion", () => {
       expect(guestDesync).toBeNull();
       expect(verified.hostAcceptedButtonSubmissions).toBeGreaterThan(0);
       expect(verified.guestAcceptedButtonSubmissions).toBeGreaterThan(0);
+      // Publish only a compact verified acceptance result. No screenshots,
+      // game save material, identity tokens or policy-training labels.
+      const report = {
+        ...verified,
+        sourceCommit: process.env["GITHUB_SHA"] ?? null,
+        workflowRunId: process.env["GITHUB_RUN_ID"] ?? null,
+        source: "github-ci-isolated-clean-checkout",
+        userSavesAccessed: false,
+        gamePolicyTrainingPerformed: false,
+        acceptance: "passed",
+      };
+      await mkdir("test-results/acceptance", { recursive: true });
+      await writeFile(
+        "test-results/acceptance/full-wave-ci.json",
+        JSON.stringify(report, null, 2) + "\\n",
+        { encoding: "utf8", flag: "w", mode: 0o600 },
+      );
     } catch (error) {
       const [finalState, detail] = await Promise.all([
         host && guest ? Promise.all([snapshot(host.page), snapshot(guest.page)])

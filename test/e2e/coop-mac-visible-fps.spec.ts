@@ -89,8 +89,9 @@ test.describe("Mac visible, real-game co-op FPS acceptance", () => {
     expect(base.protocol).toBe("http:");
     expect(["localhost", "127.0.0.1", "[::1]"]).toContain(base.hostname);
 
-    const hostContext = await newClientContext(browser, true);
-    const guestContext = await newClientContext(browser, true);
+    // Measure normal user-facing animation settings, not the CI fast-mode preset.
+    const hostContext = await newClientContext(browser, false);
+    const guestContext = await newClientContext(browser, false);
     try {
       const [host, guest] = await Promise.all([
         openClient(hostContext, "mac-visible-sam"),
@@ -114,6 +115,17 @@ test.describe("Mac visible, real-game co-op FPS acceptance", () => {
           state => (state.phase?.name === "SelectModifierPhase"
             && state.ui === "MODIFIER_SELECT") || Date.now() >= finishAt, 60000),
       ]);
+      // Install a rejection handler immediately while foreground sampling
+      // runs, then propagate any gameplay error when the sample ends.
+      void play.catch(() => {});
+      // Don't certify title, starter or pre-input introduction FPS as combat.
+      const actualInputDeadline = Date.now() + 35000;
+      while ((host.presses.length === hostBefore || guest.presses.length === guestBefore)
+        && Date.now() < actualInputDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      expect(host.presses.length).toBeGreaterThan(hostBefore);
+      expect(guest.presses.length).toBeGreaterThan(guestBefore);
 
       await host.page.bringToFront();
       const hostRaw = await sampleVisibleGame(host.page, 7000);

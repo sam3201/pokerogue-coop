@@ -90,12 +90,8 @@ export interface Client {
  * A browser context with the settings a player would have saved. `fast` is the fastest local-only set (game speed, no
  * animations, no exp or hp bar animations): none of them is pinned in co-op, so they must not matter to the run (D5).
  */
-export async function newClientContext(
-  browser: Browser,
-  fast = false,
-  viewport?: { width: number; height: number },
-): Promise<BrowserContext> {
-  const context = await browser.newContext(viewport ? { viewport } : {});
+export async function newClientContext(browser: Browser, fast = false): Promise<BrowserContext> {
+  const context = await browser.newContext();
   await context.addInitScript(
     ({ version, gender, fastSettings }) => {
       if (localStorage.getItem("settings") === null) {

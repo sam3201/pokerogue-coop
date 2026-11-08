@@ -33,7 +33,8 @@ type FrameEvidence = {
 /** Sample only the current browser tab, never streaming frames to the relay. */
 async function sampleBrowserFrames(page: import("@playwright/test").Page, ms: number): Promise<FrameEvidence> {
   return page.evaluate(async sampleMs => {
-    const {globalScene} = await import(/* @vite-ignore */ "/src/globals/global-scene.ts");
+    const gameSceneUrl: string = "/src/globals/global-scene.ts";
+    const {globalScene} = await import(/* @vite-ignore */ gameSceneUrl);
     const game = globalScene?.game;
     const phaseAtStart: string | null = (window as any).__coop?.phase?.name ?? null;
     const waveAtStart: number | null = (window as any).__coop?.phase?.wave ?? null;
@@ -90,7 +91,8 @@ async function sampleBrowserFrames(page: import("@playwright/test").Page, ms: nu
  */
 async function readPromptProgress(page: import("@playwright/test").Page) {
   return page.evaluate(async () => {
-    const {globalScene} = await import(/* @vite-ignore */ "/src/globals/global-scene.ts");
+    const gameSceneUrl: string = "/src/globals/global-scene.ts";
+    const {globalScene} = await import(/* @vite-ignore */ gameSceneUrl);
     const coop = (window as any).__coop;
     const handler: any = globalScene?.ui?.getHandler?.();
     const pace = coop?.pace ?? null;
@@ -128,12 +130,8 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
 
   test("two independent starters enter real battle and share observed state checkpoints", async ({browser}, info) => {
     test.setTimeout(180_000);
-    // Hosted headless Chromium has no dedicated GPU and can render far below
-    // realtime. Limit the diagnostic viewport without altering the game or
-    // the normal player/browser defaults.
-    const captureViewport = { width: 640, height: 360 };
-    const hostContext = await newClientContext(browser, true, captureViewport);
-    const guestContext = await newClientContext(browser, true, captureViewport);
+    const hostContext = await newClientContext(browser, true);
+    const guestContext = await newClientContext(browser, true);
     try {
       const [host, guest] = await Promise.all([
         openClient(hostContext, "frame-host"),
@@ -190,7 +188,6 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
       const evidence = {
         schema: "sam.pokerogue.clean_checkout_early_battle_frame_evidence.v1",
         environment: "hosted-headless-chromium-not-user-mac",
-        captureViewport,
         frames,
         starterPlanVerified: starterPlan.verifiedInGame,
         hostSubmittedInputs: host.presses.length - initialHostInputs,

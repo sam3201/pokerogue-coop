@@ -11,6 +11,9 @@ on:
       - "test/e2e/test-pokerogue-*.mjs"
       - "test/e2e/coop-autonomous-starters.spec.ts"
       - "test/e2e/coop-autonomous-battle-fps.spec.ts"
+      - "test/e2e/coop-autonomous-full-wave.spec.ts"
+      - "src/coop/text-catchup.ts"
+      - "src/ui/handlers/message-ui-handler.ts"
       - "test/e2e/coop-capture-restart.spec.ts"
       - ".github/workflows/sam-coop-integration.yml"
   workflow_dispatch:
@@ -47,7 +50,8 @@ jobs:
             test/e2e/test-pokerogue-capture-policy.mjs \
             test/e2e/test-pokerogue-seat-state.mjs \
             test/e2e/test-pokerogue-starter-browser.mjs \
-            test/e2e/test-pokerogue-module-integrity.mjs
+            test/e2e/test-pokerogue-module-integrity.mjs \
+            test/e2e/test-pokerogue-text-catchup.mjs
       # Browser E2E is intentionally separate: it requires real local game
       # accounts/saves and a running relay. Do not pass synthetic unlocks here.
 
@@ -74,6 +78,14 @@ jobs:
             test/e2e/coop-autonomous-starters.spec.ts \
             test/e2e/coop-autonomous-battle-fps.spec.ts \
             --project=chromium --workers=1 --reporter=line
+      - name: Validate real game-generated first-wave reward
+        timeout-minutes: 15
+        env:
+          COOP_FULL_WAVE_E2E: "1"
+        run: |
+          pnpm exec playwright test \
+            test/e2e/coop-autonomous-full-wave.spec.ts \
+            --project=chromium --workers=1 --reporter=line --retries=0
       - name: Retain failure diagnostics only
         if: failure()
         uses: actions/upload-artifact@v4

@@ -15,6 +15,15 @@ const EXTERNAL = process.env["E2E_BASE_URL"] || undefined;
 // Opt-in macOS acceptance uses real visible Chrome without CI SwiftShader flags.
 // No changes to the normal local or hosted Linux test renderer.
 const MAC_VISIBLE_FPS = process.platform === "darwin" && process.env["COOP_MAC_FPS"] === "1";
+// Avoid launching a new dev server or accidentally touching the ordinary
+// working checkout when Mac gameplay acceptance was requested.
+if (MAC_VISIBLE_FPS) {
+  if (!EXTERNAL) throw new Error("Mac FPS acceptance requires E2E_BASE_URL to an existing local game");
+  const url = new URL(EXTERNAL);
+  if (url.protocol !== "http:" || !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
+    throw new Error("Mac FPS acceptance requires a loopback HTTP game");
+  }
+}
 
 // biome-ignore lint/style/noDefaultExport: required for Playwright
 export default defineConfig({
@@ -29,8 +38,11 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: EXTERNAL ?? `http://localhost:${PORT}`,
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
+    // Normal CI retains failure diagnostics. The opt-in Mac run must not
+    // capture screenshots or browser traces from private game sessions.
+    trace: MAC_VISIBLE_FPS ? "off" : "retain-on-failure",
+    screenshot: MAC_VISIBLE_FPS ? "off" : "only-on-failure",
+    video: "off",
   },
   // A game that is already running needs no dev server
   ...(EXTERNAL === undefined

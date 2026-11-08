@@ -12,6 +12,10 @@ const PORT = 8000;
 /** A game that is already running, such as the container of a deploy (DECISIONS D22): no dev server is started for it */
 const EXTERNAL = process.env["E2E_BASE_URL"] || undefined;
 
+// Opt-in macOS acceptance uses real visible Chrome without CI SwiftShader flags.
+// No changes to the normal local or hosted Linux test renderer.
+const MAC_VISIBLE_FPS = process.platform === "darwin" && process.env["COOP_MAC_FPS"] === "1";
+
 // biome-ignore lint/style/noDefaultExport: required for Playwright
 export default defineConfig({
   testDir: "./test/e2e",
@@ -47,9 +51,11 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
-        // Phaser needs WebGL; headless Chromium has none without a software rasterizer.
+        ...(MAC_VISIBLE_FPS ? { channel: "chrome", headless: false } : {}),
+        // Hosted headless Linux requires SwiftShader, but it would turn a
+        // Mac performance check into a software-rasterization benchmark.
         launchOptions: {
-          args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
+          args: MAC_VISIBLE_FPS ? [] : ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
         },
       },
     },

@@ -128,8 +128,12 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
 
   test("two independent starters enter real battle and share observed state checkpoints", async ({browser}, info) => {
     test.setTimeout(180_000);
-    const hostContext = await newClientContext(browser, true);
-    const guestContext = await newClientContext(browser, true);
+    // Hosted headless Chromium has no dedicated GPU and can render far below
+    // realtime. Limit the diagnostic viewport without altering the game or
+    // the normal player/browser defaults.
+    const captureViewport = { width: 640, height: 360 };
+    const hostContext = await newClientContext(browser, true, captureViewport);
+    const guestContext = await newClientContext(browser, true, captureViewport);
     try {
       const [host, guest] = await Promise.all([
         openClient(hostContext, "frame-host"),
@@ -186,6 +190,7 @@ test.describe("SAM co-op: bounded early-battle frame and synchronization smoke",
       const evidence = {
         schema: "sam.pokerogue.clean_checkout_early_battle_frame_evidence.v1",
         environment: "hosted-headless-chromium-not-user-mac",
+        captureViewport,
         frames,
         starterPlanVerified: starterPlan.verifiedInGame,
         hostSubmittedInputs: host.presses.length - initialHostInputs,

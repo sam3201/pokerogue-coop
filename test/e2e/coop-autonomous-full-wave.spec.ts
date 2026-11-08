@@ -128,7 +128,7 @@ test.describe("SAM co-op: full first-wave completion", () => {
       await mkdir("test-results/acceptance", { recursive: true });
       await writeFile(
         "test-results/acceptance/full-wave-ci.json",
-        JSON.stringify(report, null, 2) + "\\n",
+        JSON.stringify(report, null, 2) + "\n",
         { encoding: "utf8", flag: "w", mode: 0o600 },
       );
     } catch (error) {

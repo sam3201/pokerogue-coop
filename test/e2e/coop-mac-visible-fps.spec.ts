@@ -26,6 +26,7 @@ import { assessMacGameplayFrames } from "./pokerogue-mac-fps-acceptance.mjs";
 type RawSample = {
   elapsedMs: number; frameCount: number; frameIntervalsMs: number[];
   waveAtStart: number; phaseAtStart: string;
+  waveAtEnd: number; phaseAtEnd: string;
   visibility: string; focused: boolean; renderBackend: number | null;
   canvasCount: number; phaserReportedFps: number | null;
   rendererString: string | null;
@@ -68,6 +69,8 @@ async function sampleVisibleGame(page: import("@playwright/test").Page, ms: numb
     return {
       elapsedMs: performance.now() - start, frameCount,
       frameIntervalsMs: gaps, phaseAtStart, waveAtStart,
+      phaseAtEnd: (window as any).__coop?.phase?.name ?? "",
+      waveAtEnd: (window as any).__coop?.phase?.wave ?? 0,
       visibility: document.visibilityState,
       focused: !lostForeground && document.hasFocus(),
       renderBackend: game?.renderer?.type ?? null,
@@ -106,14 +109,17 @@ test.describe("Mac visible, real-game co-op FPS acceptance", () => {
       });
       expect(plan.verifiedInGame).toBe(true);
       const hostBefore = host.presses.length, guestBefore = guest.presses.length;
-      const finishAt = Date.now() + 30000;
+      // Keep game inputs flowing until both foreground samples finish.
+      // A time-only stop could silently end the game loop before the second
+      // player's FPS sample, producing a plausible but invalid "gameplay" FPS.
+      let stopGameplay = false;
       const play = Promise.all([
         playUntil(host, "30 seconds of real co-op gameplay",
           state => (state.phase?.name === "SelectModifierPhase"
-            && state.ui === "MODIFIER_SELECT") || Date.now() >= finishAt, 60000),
+            && state.ui === "MODIFIER_SELECT") || stopGameplay, 100000),
         playUntil(guest, "30 seconds of real co-op gameplay",
           state => (state.phase?.name === "SelectModifierPhase"
-            && state.ui === "MODIFIER_SELECT") || Date.now() >= finishAt, 60000),
+            && state.ui === "MODIFIER_SELECT") || stopGameplay, 100000),
       ]);
       // Install a rejection handler immediately while foreground sampling
       // runs, then propagate any gameplay error when the sample ends.
@@ -128,9 +134,10 @@ test.describe("Mac visible, real-game co-op FPS acceptance", () => {
       expect(guest.presses.length).toBeGreaterThan(guestBefore);
 
       await host.page.bringToFront();
-      const hostRaw = await sampleVisibleGame(host.page, 7000);
+      const hostRaw = await sampleVisibleGame(host.page, 12000);
       await guest.page.bringToFront();
-      const guestRaw = await sampleVisibleGame(guest.page, 7000);
+      const guestRaw = await sampleVisibleGame(guest.page, 12000);
+      stopGameplay = true;
       await play;
       const [hostCps, guestCps, hostDesync, guestDesync] = await Promise.all([
         checkpointsOf(host), checkpointsOf(guest), desyncOf(host), desyncOf(guest),

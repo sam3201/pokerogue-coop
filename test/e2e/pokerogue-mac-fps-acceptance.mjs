@@ -31,9 +31,15 @@ export function assessMacGameplayFrames(sample, opts = {}) {
     && typeof phase === "string" && phase.endsWith("Phase")
     && !["TitlePhase", "SelectStarterPhase", "SelectModifierPhase",
       "GameOverPhase", "PostGameOverPhase"].includes(phase);
+  const endPhase = sample.phaseAtEnd;
+  const remainedInGameWave = Number.isInteger(sample.waveAtEnd)
+    && sample.waveAtEnd === sample.waveAtStart
+    && typeof endPhase === "string" && endPhase.endsWith("Phase")
+    && !["TitlePhase", "SelectStarterPhase", "SelectModifierPhase",
+      "GameOverPhase", "PostGameOverPhase"].includes(endPhase);
   const valid = sample.visibility === "visible"
     && sample.focused === true
-    && inWave
+    && inWave && remainedInGameWave
     && sample.renderBackend === 2
     && sample.canvasCount >= 1
     && Number.isInteger(sample.submittedInputs) && sample.submittedInputs > 0
@@ -54,6 +60,8 @@ export function assessMacGameplayFrames(sample, opts = {}) {
     phaserReportedFps: sample.phaserReportedFps ?? null,
     phaseAtStart: sample.phaseAtStart ?? null,
     waveAtStart: sample.waveAtStart ?? null,
+    phaseAtEnd: sample.phaseAtEnd ?? null,
+    waveAtEnd: sample.waveAtEnd ?? null,
     submittedInputs: sample.submittedInputs ?? 0,
     visibleAndFocused: sample.visibility === "visible" && sample.focused === true,
     renderer: sample.rendererString ?? null,

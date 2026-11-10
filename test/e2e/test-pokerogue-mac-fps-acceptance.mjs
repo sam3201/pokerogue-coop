@@ -6,6 +6,7 @@ const valid = () => ({
   frameIntervalsMs: Array.from({length:239},()=>33.3),
   elapsedMs:8000, frameCount:240,
   waveAtStart:1,phaseAtStart:"SummonPhase",
+  waveAtEnd:1,phaseAtEnd:"SummonPhase",
   visibility:"visible",focused:true,renderBackend:2,canvasCount:1,
   phaserReportedFps:32,submittedInputs:3,rendererString:"ANGLE Metal",
 });
@@ -31,6 +32,8 @@ test("game must be in a live wave with real attempted inputs and WebGL",()=>{
     {waveAtStart:0},{phaseAtStart:"SelectModifierPhase"},
     {phaseAtStart:"GameOverPhase"},{phaseAtStart:"TitlePhase"},
     {phaseAtStart:""},{phaseAtStart:"UNKNOWN"},
+    {phaseAtEnd:"SelectModifierPhase"},{phaseAtEnd:"GameOverPhase"},
+    {waveAtEnd:2},{waveAtEnd:0},{phaseAtEnd:"UNKNOWN"},
     {renderBackend:1},
     {submittedInputs:0},{canvasCount:0}
   ]){

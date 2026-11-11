@@ -12,6 +12,10 @@ on:
       - "test/e2e/coop-autonomous-starters.spec.ts"
       - "test/e2e/coop-autonomous-battle-fps.spec.ts"
       - "test/e2e/coop-autonomous-full-wave.spec.ts"
+      - "test/e2e/coop-mac-visible-fps.spec.ts"
+      - "test/e2e/pokerogue-mac-fps-acceptance.mjs"
+      - "test/e2e/test-pokerogue-mac-fps-acceptance.mjs"
+      - "playwright.config.ts"
       - "src/coop/text-catchup.ts"
       - "src/ui/handlers/message-ui-handler.ts"
       - "test/e2e/coop-capture-restart.spec.ts"
@@ -51,7 +55,8 @@ jobs:
             test/e2e/test-pokerogue-seat-state.mjs \
             test/e2e/test-pokerogue-starter-browser.mjs \
             test/e2e/test-pokerogue-module-integrity.mjs \
-            test/e2e/test-pokerogue-text-catchup.mjs
+            test/e2e/test-pokerogue-text-catchup.mjs \
+            test/e2e/test-pokerogue-mac-fps-acceptance.mjs
       # Browser E2E is intentionally separate: it requires real local game
       # accounts/saves and a running relay. Do not pass synthetic unlocks here.
 
@@ -72,6 +77,8 @@ jobs:
         uses: ./.github/actions/setup-deps
       - name: Install Chromium and its system libraries
         run: pnpm exec playwright install --with-deps chromium
+      - name: Type-parse opt-in Mac acceptance without executing it
+        run: pnpm exec playwright test test/e2e/coop-mac-visible-fps.spec.ts --project=chromium --list
       - name: Verify browser starter selection from a clean checkout
         run: |
           pnpm exec playwright test \

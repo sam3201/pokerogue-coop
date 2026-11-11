@@ -3,6 +3,8 @@ import { audioManager } from "#app/global-audio-manager";
 import { globalScene } from "#app/global-scene";
 import { getPokemonNameWithAffix } from "#app/messages";
 import { FRIENDSHIP_LOSS_FROM_FAINT } from "#balance/starters";
+import { eliminatedOwnedSeat } from "#coop/owner-rules";
+import { getCoopSession } from "#coop/session";
 import { allMoves } from "#data/data-lists";
 import { classicFinalBossDialogue } from "#data/dialogue";
 import { SpeciesFormChangeActiveTrigger } from "#data/form-change-triggers";
@@ -160,7 +162,21 @@ export class FaintPhase extends PokemonPhase {
       const legalPlayerPokemon = globalScene.getPokemonAllowedInBattle();
       /** The total number of legal player Pokemon that aren't currently on the field */
       const legalPlayerPartyPokemon = legalPlayerPokemon.filter(p => !p.isActive(true));
-      if (legalPlayerPokemon.length === 0) {
+      const session = getCoopSession();
+      const eliminated =
+        session === null
+          ? null
+          : eliminatedOwnedSeat(globalScene.getPlayerParty(), pokemonId => session.ownership.get(pokemonId));
+      if (eliminated !== null) {
+        // Each owner has at most three. A partner's remaining Pokémon
+        // cannot continue the run after the other owner loses their team.
+        // Multiple faint phases can resolve in a double battle. Queue
+        // exactly one loss for the same eliminated run.
+        if (session!.eliminatedSeat === null) {
+          session!.eliminatedSeat = eliminated;
+          globalScene.phaseManager.unshiftNew("GameOverPhase");
+        }
+      } else if (legalPlayerPokemon.length === 0) {
         /** If the player doesn't have any legal Pokemon, end the game */
         globalScene.phaseManager.unshiftNew("GameOverPhase");
       } else if (

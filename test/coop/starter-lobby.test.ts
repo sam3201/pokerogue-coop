@@ -73,13 +73,18 @@ function fakeLink() {
   };
 }
 
-function lobbyOn(seat: "host" | "guest", fake: ReturnType<typeof fakeLink>): StarterLobby {
+function lobbyOn(
+  seat: "host" | "guest",
+  fake: ReturnType<typeof fakeLink>,
+  priority: "host" | "guest" | "alternate" = "host",
+): StarterLobby {
   return new StarterLobby({
     seat,
     link: fake.link as never,
     sharedLimit: 15,
     makeRunSeed: () => "seed",
     localEvents: () => [],
+    rewardPriority: () => priority,
   });
 }
 
@@ -147,4 +152,26 @@ describe("Co-op: the starter select when a connection drops (D20)", () => {
     expect(fake.starts).toHaveLength(2);
     expect(fake.starts[1]).toEqual(fake.starts[0]);
   });
+});
+
+describe("Co-op: host-selected reward priority reaches the shared START", () => {
+  for (const priority of ["host", "guest", "alternate"] as const) {
+    it(`sends ${priority} from the host, preserves it after reconnect, and notifies local start listeners`, () => {
+      const fake = fakeLink();
+      const lobby = lobbyOn("host", fake, priority);
+      const notified: StartPayload[] = [];
+      lobby.onStart(start => notified.push(start));
+      fake.receive({ t: "ready", starters: [STARTER], cost: 3, snapshot: SNAPSHOT, events: [], gen: 1 });
+      lobby.setReady([STARTER], 3, SNAPSHOT);
+      expect(fake.starts).toHaveLength(1);
+      expect(fake.starts[0].rewardPriority).toBe(priority);
+      expect(notified).toHaveLength(1);
+      expect(notified[0]).toEqual(fake.starts[0]);
+      fake.drop("peerLeft");
+      fake.back();
+      expect(fake.starts).toHaveLength(2);
+      expect(fake.starts[1]).toEqual(fake.starts[0]);
+      expect(notified).toHaveLength(1);
+    });
+  }
 });

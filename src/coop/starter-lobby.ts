@@ -48,6 +48,8 @@ export interface StarterLobbyOptions {
   makeRunSeed(): string;
   /** The names of the timed events this client's clock has on (D33) */
   localEvents(): string[];
+  /** Host's reward selector preference, copied into START for both clients. */
+  rewardPriority?(): "host" | "guest" | "alternate";
 }
 
 interface Confirmed {
@@ -301,6 +303,7 @@ export class StarterLobby {
     const guestEvents = this.partnerReady.events;
     const start: StartPayload = {
       runSeed: this.options.makeRunSeed(),
+      rewardPriority: this.options.rewardPriority?.() ?? "host",
       starters,
       snapshots: { host: this.ready.snapshot, guest: this.partnerReady.snapshot },
       timedEvents: this.options.localEvents().filter(name => guestEvents.includes(name)),

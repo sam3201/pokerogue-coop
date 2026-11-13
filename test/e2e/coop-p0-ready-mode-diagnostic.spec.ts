@@ -20,6 +20,7 @@ type Snapshot = {
   sinceStartMs: number;
   uiMode: string | null;
   topHandler: string | null;
+  starterCursor: number | null;
   transitionPending: boolean;
   modeChainLength: number;
   foreground: { visible: boolean; focused: boolean; actualFps: number | null };
@@ -64,6 +65,7 @@ async function observe(page: Page, step: string, started: number): Promise<Snaps
       step, sinceStartMs,
       uiMode: (window as any).__coop?.ui ?? null,
       topHandler: current?.constructor?.name ?? null,
+      starterCursor: Number.isInteger(current?.cursor) ? current.cursor : null,
       transitionPending: gameUi?.coopTransition !== null,
       modeChainLength: Array.isArray(gameUi?._modeChain) ? gameUi._modeChain.length : 0,
       foreground: {
@@ -109,6 +111,21 @@ test("P0: physical guest Ready must not activate a stale Pokémon options menu",
     const readyHost = pickAndReady(host, 0);
     const readyGuest = (async () => {
       await record("initial-starter");
+      // Match the repository's existing valid co-op setup: host takes its
+      // first starter, guest physically navigates to the NEXT starter.
+      // Verify actual cursor movement; never trust a blind arrow press.
+      const guestCursor = async () => guest!.page.evaluate(async () => {
+        const runtimeUrl: string = "/src/globals/global-scene.ts";
+        const { globalScene } = await import(/* @vite-ignore */ runtimeUrl);
+        const cursor = (globalScene?.ui?.getHandler?.() as any)?.cursor;
+        return Number.isInteger(cursor) ? cursor as number : null;
+      });
+      const initialCursor = await guestCursor();
+      expect(initialCursor, "guest starter grid cursor unavailable").not.toBeNull();
+      await guest!.page.keyboard.press("ArrowRight", { delay: 65 });
+      await expect.poll(() => guestCursor(), { timeout: 15_000, intervals: [200] })
+        .toBe((initialCursor as number) + 1);
+      await record("distinct-starter-cursor-confirmed");
       await guest!.page.keyboard.press("z", { delay: 65 });
       await expect.poll(() => ui(guest!), { timeout: 25_000 }).toBe("OPTION_SELECT");
       await record("pokemon-options-open");

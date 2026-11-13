@@ -1,0 +1,35 @@
+name: P0 physical Ready menu state observation (isolated)
+on:
+  push:
+    branches:
+      - qa/p0-ready-mode-observation-20261112
+permissions:
+  contents: read
+jobs:
+  observe-physical-ready:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      COOP_E2E: "1"
+      CI: "true"
+    steps:
+      - name: Checkout source at immutable QA ref
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          submodules: recursive
+      - name: Install repository dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Install Chromium and its OS libraries
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Parse physical-input diagnostic spec
+        run: pnpm exec playwright test test/e2e/coop-p0-ready-mode-diagnostic.spec.ts --project=chromium --list
+      - name: Reproduce actual keyboard Ready and collect handler snapshots
+        run: pnpm exec playwright test test/e2e/coop-p0-ready-mode-diagnostic.spec.ts --project=chromium --workers=1 --reporter=line --retries=0
+      - name: Upload non-secret structural state trace even on assertion failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physical-ready-mode-diagnostic
+          path: test-results/acceptance/p0-ready-mode-diagnostic.json
+          if-no-files-found: warn
+          retention-days: 5

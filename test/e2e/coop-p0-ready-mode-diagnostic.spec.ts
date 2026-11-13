@@ -22,6 +22,8 @@ type Snapshot = {
   topHandler: string | null;
   transitionPending: boolean;
   modeChainLength: number;
+  foreground: { visible: boolean; focused: boolean; actualFps: number | null };
+  text: { length: number | null; timerRepeats: number | null; timerPaused: boolean | null; timerElapsedMs: number | null; pendingPrompt: boolean; awaitingActionInput: boolean };
   handlers: Array<{
     index: number;
     name: string;
@@ -41,6 +43,8 @@ async function observe(page: Page, step: string, started: number): Promise<Snaps
     const { globalScene } = await import(/* @vite-ignore */ runtimeUrl);
     const gameUi = globalScene?.ui as any;
     const current = gameUi?.getHandler?.();
+    const msg = gameUi?.getMessageHandler?.();
+    const timer = msg?.textTimer;
     const handlers = ((gameUi?.handlers ?? []) as any[])
       .map((h, index) => ({
         index,
@@ -62,6 +66,20 @@ async function observe(page: Page, step: string, started: number): Promise<Snaps
       topHandler: current?.constructor?.name ?? null,
       transitionPending: gameUi?.coopTransition !== null,
       modeChainLength: Array.isArray(gameUi?._modeChain) ? gameUi._modeChain.length : 0,
+      foreground: {
+        visible: document.visibilityState === "visible",
+        focused: document.hasFocus(),
+        actualFps: Number.isFinite(globalScene?.game?.loop?.actualFps)
+          ? Math.round(globalScene.game.loop.actualFps * 10) / 10 : null,
+      },
+      text: {
+        length: typeof msg?.message?.text === "string" ? msg.message.text.length : null,
+        timerRepeats: Number.isFinite(timer?.repeatCount) ? timer.repeatCount : null,
+        timerPaused: typeof timer?.paused === "boolean" ? timer.paused : null,
+        timerElapsedMs: Number.isFinite(timer?.elapsed) ? Math.round(timer.elapsed) : null,
+        pendingPrompt: msg?.pendingPrompt === true,
+        awaitingActionInput: msg?.awaitingActionInput === true,
+      },
       handlers,
     };
   }, { step, sinceStartMs: Date.now() - started });
@@ -78,7 +96,7 @@ test("P0: physical guest Ready must not activate a stale Pokémon options menu",
   let host: Awaited<ReturnType<typeof openClient>> | undefined;
   let guest: Awaited<ReturnType<typeof openClient>> | undefined;
   const record = async (step: string) => {
-    if (guest && samples.length < 80) samples.push(await observe(guest.page, step, started));
+    if (guest && samples.length < 130) samples.push(await observe(guest.page, step, started));
   };
   try {
     [host, guest] = await Promise.all([
@@ -104,7 +122,14 @@ test("P0: physical guest Ready must not activate a stale Pokémon options menu",
       }
       await guest!.page.keyboard.press("Enter", { delay: 65 });
       await record("post-enter-immediate");
-      for (let i = 0; i < 40; i++) {
+      for (let i = 0; i < 105; i++) {
+        // After the original eight-second observation, compare the same
+        // running game with the guest page explicitly brought to the front.
+        if (i === 40) {
+          await record("pre-foreground-intervention");
+          await guest!.page.bringToFront();
+          await record("post-foreground-intervention");
+        }
         await guest!.page.waitForTimeout(200);
         await record("post-enter-" + i);
         if (await ui(guest!) === "CONFIRM") { pass = true; break; }

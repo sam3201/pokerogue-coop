@@ -111,12 +111,18 @@ async function installInputTrace(page: Page): Promise<void> {
     };
     (window as any).__qaPhysicalReadyEvents = events;
     // Capture physical and mapped events without dispatching any.
-    window.addEventListener("keydown", event => {
-      if (["Enter", "z", "ArrowRight"].includes(event.key)) addEvent("dom-keydown", { key: event.key });
-    }, { capture: true });
-    window.addEventListener("keyup", event => {
-      if (["Enter", "z", "ArrowRight"].includes(event.key)) addEvent("dom-keyup", { key: event.key });
-    }, { capture: true });
+    // This runner uses only temporary synthetic test users; capture each key
+    // identity and code, never text field values, for event-order causality.
+    const rawKey = (event: KeyboardEvent) => ({
+      key: event.key, code: event.code, keyCode: event.keyCode,
+      repeat: event.repeat, trusted: event.isTrusted,
+    });
+    window.addEventListener("keydown", event => addEvent("dom-keydown", rawKey(event)), { capture: true });
+    window.addEventListener("keyup", event => addEvent("dom-keyup", rawKey(event)), { capture: true });
+    globalScene.input?.keyboard?.on("keydown", (event: KeyboardEvent) =>
+      addEvent("phaser-keydown", rawKey(event)));
+    globalScene.input?.keyboard?.on("keyup", (event: KeyboardEvent) =>
+      addEvent("phaser-keyup", rawKey(event)));
     globalScene.game?.events?.on("input_up", (event: any) => {
       addEvent("mapped-keyup", { button: event?.button ?? null, source: event?.controller_type ?? null });
     });

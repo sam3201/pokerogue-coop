@@ -4,7 +4,6 @@ import { settings } from "#app/global-settings-manager";
 import { TouchControl } from "#app/touch-controls";
 import { isDev } from "#constants/app-constants";
 import { bindCoopHotkeys } from "#coop/hotkey-names";
-import { isCoop } from "#coop/session";
 import { Button } from "#enums/buttons";
 import { Device } from "#enums/devices";
 import { UiMode } from "#enums/ui-mode";
@@ -371,20 +370,12 @@ export class InputsController {
         button: buttonDown,
       });
       clearInterval(this.inputInterval[buttonDown]);
-      // Co-op starter/option/confirmation menus must consume one selection per
-      // physical keydown. A delayed repeat of held ACTION must never reopen a
-      // Pokémon menu and turn the following SUBMIT into Remove from Party.
-      const selectionInCoopMenu = isCoop()
-        && (buttonDown === Button.ACTION || buttonDown === Button.SUBMIT)
-        && [UiMode.STARTER_SELECT, UiMode.OPTION_SELECT, UiMode.CONFIRM].includes(globalScene.ui?.mode);
-      if (!selectionInCoopMenu) {
-        this.inputInterval[buttonDown] = setInterval(() => {
-          this.events.emit("input_down", {
-            controller_type: "keyboard",
-            button: buttonDown,
-          });
-        }, repeatInputDelayMillis);
-      }
+      this.inputInterval[buttonDown] = setInterval(() => {
+        this.events.emit("input_down", {
+          controller_type: "keyboard",
+          button: buttonDown,
+        });
+      }, repeatInputDelayMillis);
       this.buttonLock.push(buttonDown);
     }
   }

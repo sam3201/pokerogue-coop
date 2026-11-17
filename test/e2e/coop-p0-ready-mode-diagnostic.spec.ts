@@ -114,6 +114,12 @@ async function installInputTrace(page: Page): Promise<void> {
     window.addEventListener("keydown", event => {
       if (["Enter", "z", "ArrowRight"].includes(event.key)) addEvent("dom-keydown", { key: event.key });
     }, { capture: true });
+    window.addEventListener("keyup", event => {
+      if (["Enter", "z", "ArrowRight"].includes(event.key)) addEvent("dom-keyup", { key: event.key });
+    }, { capture: true });
+    globalScene.game?.events?.on("input_up", (event: any) => {
+      addEvent("mapped-keyup", { button: event?.button ?? null, source: event?.controller_type ?? null });
+    });
     globalScene.game?.events?.on("input_down", (event: any) => {
       addEvent("mapped-input", { button: event?.button ?? null, source: event?.controller_type ?? null });
     });

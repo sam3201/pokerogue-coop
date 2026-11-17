@@ -1,0 +1,57 @@
+name: P0 linked physical guest and keyboard acceptance (isolated)
+on:
+  push:
+    branches: [qa/p0-physical-guest-acceptance-20261116]
+permissions:
+  contents: read
+jobs:
+  guest-sequencer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COOP_E2E: "1"
+      CI: "true"
+    steps:
+      - name: Checkout exact integration source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Install Chromium and OS libraries
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Physical guest keyboard through host SEQUENCED receipt
+        run: pnpm exec playwright test test/e2e/coop-sam-guest-turn.spec.ts --project=chromium --workers=1 --reporter=line --retries=0
+      - name: Retain failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physical-guest-wire-failure
+          path: test-results/e2e/
+          if-no-files-found: ignore
+          retention-days: 2
+  keyboard-navigation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      COOP_E2E: "1"
+      CI: "true"
+    steps:
+      - name: Checkout exact integration source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Install Chromium and OS libraries
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real keyboard menu navigation and private guest join
+        run: pnpm exec playwright test test/e2e/coop-sam-keyboard-smoke.spec.ts --project=chromium --workers=1 --reporter=line --retries=0
+      - name: Retain failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyboard-menu-failure
+          path: test-results/e2e/
+          if-no-files-found: ignore
+          retention-days: 2

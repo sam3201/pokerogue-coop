@@ -115,6 +115,7 @@ async function installInputTrace(page: Page): Promise<void> {
     // identity and code, never text field values, for event-order causality.
     const rawKey = (event: KeyboardEvent) => ({
       key: event.key, code: event.code, keyCode: event.keyCode,
+      eventTimestamp: Math.round(event.timeStamp * 100) / 100,
       repeat: event.repeat, trusted: event.isTrusted,
     });
     window.addEventListener("keydown", event => addEvent("dom-keydown", rawKey(event)), { capture: true });

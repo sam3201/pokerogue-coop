@@ -68,6 +68,8 @@ export class InputsController {
   public events: Phaser.Events.EventEmitter;
 
   private buttonLock: Button[] = [];
+  /** Ignore Phaser-delayed keydowns that predate the key's already-seen release. */
+  private readonly lastKeyboardReleaseAt = new Map<number, number>();
   private readonly interactions: Partial<Record<Button, Interaction>> = {};
   private configs: Record<string, InterfaceConfig> = {};
 
@@ -358,6 +360,14 @@ export class InputsController {
    * @param event The keyboard event.
    */
   keyboardKeyDown(event: KeyboardEvent): void {
+    // Phaser may deliver a queued old keydown after its keyup has already
+    // been handled (e.g. an earlier Z when the player next presses Enter).
+    // A released press must not become an additional menu selection.
+    const lastReleaseAt = this.lastKeyboardReleaseAt.get(event.keyCode);
+    if (lastReleaseAt !== undefined && Number.isFinite(event.timeStamp)
+      && event.timeStamp > 0 && event.timeStamp <= lastReleaseAt) {
+      return;
+    }
     this.lastSource = "keyboard";
     this.ensureKeyboardIsInit();
     const buttonDown = getButtonWithKeycode(this.getActiveConfig(Device.KEYBOARD)!, event.keyCode);
@@ -386,6 +396,13 @@ export class InputsController {
    * @param event The keyboard event.
    */
   keyboardKeyUp(event: KeyboardEvent): void {
+    if (Number.isFinite(event.timeStamp) && event.timeStamp > 0) {
+      const lastReleaseAt = this.lastKeyboardReleaseAt.get(event.keyCode);
+      if (lastReleaseAt !== undefined && event.timeStamp <= lastReleaseAt) {
+        return;
+      }
+      this.lastKeyboardReleaseAt.set(event.keyCode, event.timeStamp);
+    }
     this.lastSource = "keyboard";
     // Bang is safe here; can't receive keyboard input if no active keyboard
     const buttonUp = getButtonWithKeycode(this.getActiveConfig(Device.KEYBOARD)!, event.keyCode);

@@ -151,55 +151,46 @@ describe("Co-op: faint rules and the wave-start arrange step (D7)", () => {
   );
 
   it(
-    "(b) the owner has no bench: the partner's bench fills the slot and nobody changes owner",
+    "(b) a guest owner with no living bench ends co-op, even though the host has healthy reserves",
     async () => {
-      // the guest brings one Pokémon, the host five
       const r = await start({
         species: SPECIES.slice(0, 4),
         starterOwners: ["host", "guest", "host", "host"],
         faints: [{ wave: 1, turn: 1, slots: [1] }],
       });
-      const initialOwners = requireCoopSession().ownership.toJSON();
-      const opened = watchFaintSwitchCursor();
-      const nameOf = await playWaves(r, 1);
-      const { report } = r.ctx;
+      const owners = requireCoopSession().ownership.toJSON();
+      const { ctx } = r;
+      await advanceTo(ctx, ["CommandPhase"]);
+      queueTurnCommands(ctx);
+      const reached = await advanceTo(ctx, ["GameOverPhase", "TurnInitPhase", "SelectModifierPhase"]);
 
-      expect(report.stalledIn).toBeNull();
-      const [swap] = report.replacementLog;
-      expect(nameOf([swap.fainted, swap.chosen])).toEqual(["G1", "H2"]);
-      // the host chooses for the guest's slot: the screen opens on the host's bench, not on the field
-      expect(nameOf(opened)).toEqual(["H2"]);
-      expect(swap.by).toBe("host");
-      expect(r.ctx.decider.decisions.find(d => d.key.kind === "FAINT_SWITCH")).toMatchObject({ by: "host" });
-      // the Pokémon that came in is still the host's; the guest's fainted one is still the guest's
-      expect(requireCoopSession().ownership.toJSON()).toEqual(initialOwners);
-      expect(requireCoopSession().ownership.get(swap.fainted)).toBe("guest");
-      expect(requireCoopSession().ownership.get(swap.chosen)).toBe("host");
+      expect(reached).toBe("GameOverPhase");
+      expect(requireCoopSession().eliminatedSeat).toBe("guest");
+      expect(ctx.game.scene.getPokemonAllowedInBattle().length).toBeGreaterThan(0);
+      expect(ctx.report.replacementLog).toEqual([]);
+      expect(ctx.decider.decisions.filter(d => d.key.kind === "FAINT_SWITCH")).toEqual([]);
+      expect(requireCoopSession().ownership.toJSON()).toEqual(owners);
     },
     5 * MINUTES,
   );
 
   it(
-    "(c) one seat is wiped: the partner covers both slots, for the commands too",
+    "(c) a host owner with no living Pokémon ends co-op, rather than letting the guest control both slots",
     async () => {
       const r = await start({
         species: SPECIES.slice(0, 4),
-        starterOwners: ["host", "guest", "host", "host"],
-        faints: [{ wave: 1, turn: 1, slots: [1] }],
+        starterOwners: ["host", "guest", "guest", "guest"],
+        faints: [{ wave: 1, turn: 1, slots: [0] }],
       });
-      await playWaves(r, 3);
-      const { report } = r.ctx;
+      const { ctx } = r;
+      await advanceTo(ctx, ["CommandPhase"]);
+      queueTurnCommands(ctx);
+      const reached = await advanceTo(ctx, ["GameOverPhase", "TurnInitPhase", "SelectModifierPhase"]);
 
-      expect(report.stalledIn).toBeNull();
-      // wave 1 started with one of each; after the guest's only Pokémon fainted the host has both slots
-      expect(report.waves[0].controllers).toEqual(["host", "guest"]);
-      expect(report.waves[1].controllers).toEqual(["host", "host"]);
-      expect(report.waves[2].controllers).toEqual(["host", "host"]);
-      expect(report.waves[1].legalBySeat).toEqual({ host: 3, guest: 0 });
-      // and every command of those waves was the host's
-      const later = r.ctx.decider.decisions.filter(d => d.key.kind === "TURN_COMMANDS" && d.key.wave >= 2);
-      expect(later.length).toBeGreaterThanOrEqual(4);
-      expect(later.every(d => d.by === "host")).toBe(true);
+      expect(reached).toBe("GameOverPhase");
+      expect(requireCoopSession().eliminatedSeat).toBe("host");
+      expect(ctx.game.scene.getPokemonAllowedInBattle().length).toBeGreaterThan(0);
+      expect(ctx.report.replacementLog).toEqual([]);
     },
     5 * MINUTES,
   );
@@ -219,7 +210,9 @@ describe("Co-op: faint rules and the wave-start arrange step (D7)", () => {
       const reached = await advanceTo(ctx, ["GameOverPhase", "TurnInitPhase", "SelectModifierPhase"]);
 
       expect(reached).toBe("GameOverPhase");
-      expect(ctx.game.scene.getPokemonAllowedInBattle()).toHaveLength(0);
+      // End at the first owner's final faint, before the other queued
+      // faint phase necessarily finishes its animation. No further turn.
+      expect(requireCoopSession().eliminatedSeat).not.toBeNull();
       expect(ctx.report.replacementLog).toEqual([]);
       expect(ctx.decider.decisions.filter(d => d.key.kind === "FAINT_SWITCH")).toEqual([]);
     },
@@ -227,86 +220,65 @@ describe("Co-op: faint rules and the wave-start arrange step (D7)", () => {
   );
 
   it(
-    "the arrange step after mixed faints across waves: each seat's first legal Pokémon in its slot, the partner covers a wiped seat",
+    "normal owned replacements work until an owner's final Pokémon falls, then the run ends",
     async () => {
-      // the guest loses its Pokémon one by one, the host loses its first
       const r = await start({
         faints: [
           { wave: 2, turn: 1, slots: [1] }, // G1 -> G2
           { wave: 3, turn: 1, slots: [0] }, // H1 -> H2
           { wave: 4, turn: 1, slots: [1] }, // G2 -> G3
-          { wave: 5, turn: 1, slots: [1] }, // G3 -> nobody of the guest's: H3 from the partner's bench
+          { wave: 5, turn: 1, slots: [1] }, // G3 -> co-op loss, no H3 loan
         ],
       });
-      const initialOwners = requireCoopSession().ownership.toJSON();
-      const nameOf = await playWaves(r, 7);
-      const { report } = r.ctx;
+      const originalOwners = requireCoopSession().ownership.toJSON();
+      const nameOf = await playWaves(r, 4);
+      const { ctx } = r;
 
-      expect(report.stalledIn).toBeNull();
-      expect(report.replacementLog.map(s => nameOf([s.fainted, s.chosen]))).toEqual([
+      expect(ctx.report.replacementLog.map(s => nameOf([s.fainted, s.chosen]))).toEqual([
         ["G1", "G2"],
         ["H1", "H2"],
         ["G2", "G3"],
-        ["G3", "H3"],
       ]);
-      expect(report.replacementLog.map(s => s.by)).toEqual(["guest", "host", "guest", "host"]);
-
-      // At every wave start the slots hold what the rule says, whoever was on the field before
-      for (const wave of report.waves) {
-        const { host, guest } = wave.legalBySeat;
-        const expected =
-          host > 0 && guest > 0
-            ? ["host", "guest"]
-            : host > 1
-              ? ["host", "host"]
-              : guest > 1
-                ? ["guest", "guest"]
-                : ["host"];
-        expect(wave.controllers, `wave ${wave.wave} (${host} host, ${guest} guest left)`).toEqual(expected);
-        // the slot Pokémon are the first two of the party, and they are the ones on the field
-        expect(wave.onField.slice().sort(), `wave ${wave.wave}`).toEqual(wave.partyOrder.slice(0, 2).sort());
-      }
-      // the seats ran out in this order
-      expect(report.waves.map(w => w.legalBySeat.guest)).toEqual([3, 3, 2, 2, 1, 0, 0]);
-      // the guest is wiped from wave 6 on: the host commands both slots there
-      expect(report.waves[5].controllers).toEqual(["host", "host"]);
-      expect(report.waves[6].controllers).toEqual(["host", "host"]);
-      // ownership never changed
-      expect(requireCoopSession().ownership.toJSON()).toEqual(initialOwners);
+      expect(ctx.report.replacementLog.map(s => s.by)).toEqual(["guest", "host", "guest"]);
+      expect(ctx.report.waves.every(w => w.controllers[0] === "host" && w.controllers[1] === "guest")).toBe(true);
+      await advanceTo(ctx, ["CommandPhase"]);
+      queueTurnCommands(ctx);
+      const reached = await advanceTo(ctx, ["GameOverPhase", "TurnInitPhase", "SelectModifierPhase"]);
+      expect(reached).toBe("GameOverPhase");
+      expect(requireCoopSession().eliminatedSeat).toBe("guest");
+      expect(ctx.report.replacementLog).toHaveLength(3);
+      expect(requireCoopSession().ownership.toJSON()).toEqual(originalOwners);
     },
     10 * MINUTES,
   );
 
   it(
-    "a revived Pokémon takes its seat's slot back at the next wave, and the one that covered for it is recalled",
+    "a revived owned Pokémon can return after a legal same-owner bench replacement",
     async () => {
       const r = await start({
         species: SPECIES.slice(0, 4),
-        starterOwners: ["host", "guest", "host", "host"],
+        starterOwners: ["host", "guest", "guest", "host"],
         faints: [{ wave: 1, turn: 1, slots: [1] }],
         afterWave: ({ game }, wave) => {
           if (wave !== 1) {
             return;
           }
-          // the guest's Pokémon that fainted in wave 1 is revived before wave 2
           const fainted = game.scene.getPlayerParty().find(p => p.isFainted())!;
           fainted.resetStatus(true, false, false, false);
           fainted.hp = fainted.getMaxHp();
         },
       });
-      const initialOwners = requireCoopSession().ownership.toJSON();
+      const originalOwners = requireCoopSession().ownership.toJSON();
       const nameOf = await playWaves(r, 2);
       const { report } = r.ctx;
-
       expect(report.stalledIn).toBeNull();
-      // wave 1: H1 and G1; G1 fainted and H2 covered for the guest
+      expect(report.replacementLog).toHaveLength(1);
       const [swap] = report.replacementLog;
-      expect(nameOf([swap.fainted, swap.chosen])).toEqual(["G1", "H2"]);
-      // wave 2: G1 is back in the guest's slot and H2 is off the field again
+      expect(nameOf([swap.fainted, swap.chosen])).toEqual(["G1", "G2"]);
+      expect(swap.by).toBe("guest");
       expect(report.waves[1].controllers).toEqual(["host", "guest"]);
-      expect(report.waves[1].partyOrder.slice(0, 2).map(id => nameOf([id])[0])).toEqual(["H1", "G1"]);
-      expect(report.waves[1].onField.map(id => nameOf([id])[0]).sort()).toEqual(["G1", "H1"]);
-      expect(requireCoopSession().ownership.toJSON()).toEqual(initialOwners);
+      expect(requireCoopSession().eliminatedSeat).toBeNull();
+      expect(requireCoopSession().ownership.toJSON()).toEqual(originalOwners);
     },
     5 * MINUTES,
   );

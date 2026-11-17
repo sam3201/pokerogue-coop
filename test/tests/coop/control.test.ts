@@ -142,11 +142,11 @@ describe("Co-op: who owns, controls and decides (D7, D9, D10)", () => {
       expect(ids(switchTargets(1, "faint"))).toEqual([G3]);
     });
 
-    it("faint: with no bench of the owner's, the partner's", () => {
+    it("faint: with no living owned bench, the owner loses instead of borrowing the partner's", () => {
       faint(G1, G2, G3);
-      expect(ids(switchTargets(1, "faint"))).toEqual([H2, H3]);
-      // and the owner does not change: the guest's fainted Pokémon is still the guest's
+      expect(switchTargets(1, "faint")).toEqual([]);
       expect(requireOwnerOf(party[G1])).toBe("guest");
+      expect(isAllowedSwitch(1, H2, "faint")).toBe(false);
     });
 
     it("faint: with no bench at all, nothing (upstream behaviour)", () => {
@@ -178,7 +178,7 @@ describe("Co-op: who owns, controls and decides (D7, D9, D10)", () => {
       faint(G1);
       expect(deciderOf({ kind: "FAINT_SWITCH", fieldIndex: 1 })).toBe("guest");
       faint(G2, G3);
-      expect(deciderOf({ kind: "FAINT_SWITCH", fieldIndex: 1 })).toBe("host");
+      expect(deciderOf({ kind: "FAINT_SWITCH", fieldIndex: 1 })).toBeNull();
       faint(H2, H3);
       expect(deciderOf({ kind: "FAINT_SWITCH", fieldIndex: 1 })).toBeNull();
     });
@@ -200,7 +200,7 @@ describe("Co-op: who owns, controls and decides (D7, D9, D10)", () => {
       expect(deciderOf({ kind: "SHOP_BUY" })).toBe("either");
     });
 
-    it("rewards and the biome: the picker of the screen that is open, alternating, host first", () => {
+    it("rewards and the biome: host-default picker remains owner until changed before a run", () => {
       const session = requireCoopSession();
       const base = session.rewardPickCount;
       expect(deciderOf({ kind: "BIOME" })).toBe(session.lastRewardPicker);
@@ -210,7 +210,7 @@ describe("Co-op: who owns, controls and decides (D7, D9, D10)", () => {
       expect(deciderOf({ kind: "REWARD_TARGET" })).toBe(first);
       expect(deciderOf({ kind: "BIOME" })).toBe(first);
       session.beginRewardScreen();
-      expect(deciderOf({ kind: "REWARD_PICK" })).toBe(first === "host" ? "guest" : "host");
+      expect(deciderOf({ kind: "REWARD_PICK" })).toBe(first);
       expect(session.rewardPickCount).toBe(base + 2);
     });
   });
@@ -247,11 +247,11 @@ describe("Co-op: who owns, controls and decides (D7, D9, D10)", () => {
       expect(coopSwitchFilter(1, "faint", upstream)(party[G2])).toBe("fainted");
     });
 
-    it("on a faint, the partner's Pokémon are allowed once the owner's bench is empty", () => {
+    it("on an owner wipe, the partner's Pokémon remain ineligible", () => {
       faint(G1, G2, G3);
       const filter = coopSwitchFilter(1, "faint", upstream);
-      expect(filter(party[H2])).toBeNull();
-      expect(filter(party[H3])).toBeNull();
+      expect(filter(party[H2])).toEqual(expect.any(String));
+      expect(filter(party[H3])).toEqual(expect.any(String));
     });
   });
 

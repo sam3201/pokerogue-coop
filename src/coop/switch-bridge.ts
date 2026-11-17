@@ -39,7 +39,7 @@ export function isSwitchPayload(value: unknown): value is SwitchPayload {
 
 /**
  * Decide who goes into the slot `fieldIndex`, whose Pokémon left it.
- * - faint: the owner of the fainted Pokémon picks from their bench, else the partner from theirs
+ * - faint: the fainted owner picks from only their own bench; an exhausted owner loses the run
  * - voluntary (a pivot): the controller of the slot picks from their own bench
  *
  * The decider sees the party screen; the other client waits. Both return the same payload, already checked against

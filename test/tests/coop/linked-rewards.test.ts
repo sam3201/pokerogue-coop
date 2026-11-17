@@ -89,6 +89,9 @@ describe("Co-op: the reward screen (D9)", () => {
     const r = await start({
       configure: game => game.override.startingLevel(40).startingWave(7),
     });
+    // This legacy alternation test explicitly opts into the alternate mode.
+    // Newly started co-op runs default to host priority.
+    r.session.setRewardPriority("alternate");
     const pickers: string[] = [];
     const waves: number[] = [];
     while (r.session.rewardPickCount < 6) {
@@ -105,8 +108,21 @@ describe("Co-op: the reward screen (D9)", () => {
     // waves 7, 8, 9, then 11, 12, 13: the tenth has fixed rewards and no screen
     expect(waves).toEqual([7, 8, 9, 11, 12, 13]);
     expect(r.session.rewardPickCount).toBe(6);
-    expect(pickers.every((picker, screen) => picker === rewardPickerOf(screen))).toBe(true);
+    expect(pickers.every((picker, screen) => picker === rewardPickerOf(screen, "alternate"))).toBe(true);
     expect(r.session.desyncMessage).toBeNull();
+  });
+
+  it("default host priority persists across successive reward screens", async () => {
+    const r = await start();
+    expect(await winWave(r)).toBe(true);
+    expect(openScreen()).toMatchObject({ screen: 0, picker: "host" });
+    pickerSkips(r);
+    expect(await winWave(r)).toBe(true);
+    expect(openScreen()).toMatchObject({ screen: 1, picker: "host" });
+    pickerSkips(r);
+    await advanceTo(r.ctx, ["CommandPhase"]);
+    expect(r.session.rewardPriority).toBe("host");
+    expect(r.session.rewardPickCount).toBe(2);
   });
 
   it("lets the picker choose a Pokémon of the partner for the reward", async () => {
@@ -236,6 +252,7 @@ describe("Co-op: the reward screen (D9)", () => {
 
   it("gives the buttons of the picker to the picker only, on the screen of the one who is not", async () => {
     const r = await start();
+    r.session.setRewardPriority("alternate");
     // screen 0: the host skips; screen 1 is the guest's
     expect(await winWave(r)).toBe(true);
     pickerSkips(r);
@@ -311,6 +328,7 @@ describe("Co-op: the reward screen (D9)", () => {
 
   it("gives the screen back to the player who is not picking after a cancel (it stopped answering until the pick)", async () => {
     const r = await start();
+    r.session.setRewardPriority("alternate");
     // the next screen is the guest's to pick: this client (the host) watches it
     r.session.rewardPickCount = 1;
     await openRewardScreen(r, [option(getModifierType(modifierTypes.LEFTOVERS))]);

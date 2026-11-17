@@ -134,6 +134,8 @@ describe("Co-op: between the waves and the end of the run (D4a, D8, D10)", () =>
       const r = await start({
         configure: game => game.override.startingLevel(40).startingWave(8).startingBiome(BiomeId.PLAINS),
       });
+      // This historical scenario specifically tests alternating reward ownership.
+      r.session.setRewardPriority("alternate");
       const choices = spyOnBiomeChoices();
       await giveMap(r);
       const { game } = r.ctx;
@@ -472,7 +474,13 @@ describe("Co-op: between the waves and the end of the run (D4a, D8, D10)", () =>
       const awarded = spyOnRibbons();
 
       expect(await playToRunEnd(r)).toBe(false);
-      expect(game.scene.getPlayerParty().every(pokemon => pokemon.isFainted())).toBe(true);
+      // The run now ends when either owner has lost all of their Pokémon;
+      // the other owner may still have healthy Pokémon.
+      expect(r.session.eliminatedSeat).not.toBeNull();
+      const defeatedOwner = r.session.eliminatedSeat;
+      const defeatedParty = game.scene.getPlayerParty().filter(pokemon => ownerOf(pokemon) === defeatedOwner);
+      expect(defeatedParty.length).toBeGreaterThan(0);
+      expect(defeatedParty.every(pokemon => pokemon.isFainted())).toBe(true);
       await game.phaseInterceptor.to("PostGameOverPhase", false);
       expect(awarded).toEqual([]);
       expect(r.session.desyncMessage).toBeNull();

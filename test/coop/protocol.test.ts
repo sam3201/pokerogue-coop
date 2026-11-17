@@ -218,11 +218,15 @@ describe("START", () => {
   it("carries the run seed, the starters of both seats, both accounts and the timed events of the run", () => {
     expect(isStartPayload(start)).toBe(true);
     expect(isStartPayload(JSON.parse(JSON.stringify(start)))).toBe(true);
+    expect(isStartPayload({ ...start, rewardPriority: "host" })).toBe(true);
+    expect(isStartPayload({ ...start, rewardPriority: "guest" })).toBe(true);
+    expect(isStartPayload({ ...start, rewardPriority: "alternate" })).toBe(true);
   });
 
   it.each([
     ["an empty seed", { ...start, runSeed: "" }],
     ["a seed that is no string", { ...start, runSeed: 5 }],
+    ["an invalid reward picker mode", { ...start, rewardPriority: "speed" }],
     ["no starters", { runSeed: "x7Kq", snapshots: start.snapshots }],
     ["a seat with no starter", { ...start, starters: { host: [], guest: [starter] } }],
     [

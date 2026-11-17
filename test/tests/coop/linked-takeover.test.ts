@@ -262,6 +262,8 @@ describe("Co-op: AFK and take over in a linked run (D17)", () => {
 
     it("reward screen: takes the picker's place, and the pick closes the screen", async () => {
       const r = await start();
+      // Only alternating mode makes the second reward screen belong to the absent guest.
+      r.session.setRewardPriority("alternate");
       const { game } = r.ctx;
       // screen 0: the host's; screen 1: the guest's, who is away
       expect(await winWave(r)).toBe(true);

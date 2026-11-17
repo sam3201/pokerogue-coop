@@ -10,6 +10,7 @@ import type { SettingsOverlayPort } from "#coop/handshake";
 import type { RewardView } from "#coop/legal";
 import type { CoopLink } from "#coop/link";
 import type { MeQuestion } from "#coop/me-choice";
+import { chooseRewardPicker, type RewardPriority } from "#coop/owner-rules";
 import { defaultStarterOwners, OwnerMap } from "#coop/ownership";
 import { PaceTracker } from "#coop/pace";
 import { PhaseTrace } from "#coop/phase-trace";
@@ -40,12 +41,9 @@ export function accountIdOf(account: AccountSnapshot): string {
   return `${account.trainerId}:${account.secretId}`;
 }
 
-/**
- * Who picks on the reward screen with this index (D9): the host on screens `0, 2, 4, ...`, the guest on the others.
- * The index counts reward screens, not waves: every tenth wave has none.
- */
-export function rewardPickerOf(rewardPickCount: number): Seat {
-  return rewardPickCount % 2 === 0 ? "host" : "guest";
+/** Synchronized co-op reward picker. Default: host; not last-hit or speed-based. */
+export function rewardPickerOf(rewardPickCount: number, priority: RewardPriority = "host"): Seat {
+  return chooseRewardPicker(rewardPickCount, priority);
 }
 
 export interface CoopSessionInit {
@@ -64,6 +62,8 @@ export interface CoopSessionInit {
   accountIds?: Record<Seat, string>;
   /** Who owns each starter, in party order (D7); defaults to three each, the host's first */
   starterOwners?: readonly Seat[];
+  /** Host-selected, synchronized after-battle reward priority, default host. */
+  rewardPriority?: RewardPriority;
 }
 
 /** How long this client waited for its partner's decisions, for the debug API and the latency report */
@@ -93,6 +93,10 @@ export class CoopSession {
   private owners: readonly Seat[];
   /** Reward screens started so far (D9); lives in the save block */
   public rewardPickCount = 0;
+  /** Host-synchronized reward priority. Only change before any reward opens. */
+  public rewardPriority: RewardPriority = "host";
+  /** When either owner has no living Pokémon, this ends the run without a wave retry. */
+  public eliminatedSeat: Seat | null = null;
   /** The step of the open reward screen: how many of its decisions were sequenced so far (D9); not saved */
   public rewardStep = 0;
   /** The reward screen that is open, as the legality check sees it (D24); `null` while none is */
@@ -210,6 +214,7 @@ export class CoopSession {
     this.snapshot = init.accountSnapshot ?? null;
     this.explicitAccountIds = init.accountIds ?? null;
     this.owners = init.starterOwners ?? defaultStarterOwners();
+    this.rewardPriority = init.rewardPriority ?? "host";
   }
 
   public get starterOwners(): readonly Seat[] {
@@ -219,6 +224,14 @@ export class CoopSession {
   /** `START` told who picked which starter: the run is set up with these owners. */
   public setStarterOwners(owners: readonly Seat[]): void {
     this.owners = owners;
+  }
+
+  /** Both clients receive the identical host-selected mode through START. */
+  public setRewardPriority(priority: RewardPriority): void {
+    if (this.rewardPickCount !== 0) {
+      throw new Error("Cannot change reward priority after the first reward screen");
+    }
+    this.rewardPriority = priority;
   }
 
   /** The host's seed of the run (D3) */
@@ -309,12 +322,12 @@ export class CoopSession {
   public beginRewardScreen(): { index: number; picker: Seat } {
     const index = this.rewardPickCount++;
     this.rewardStep = 0;
-    return { index, picker: rewardPickerOf(index) };
+    return { index, picker: rewardPickerOf(index, this.rewardPriority) };
   }
 
   /** @returns The picker of the most recent reward screen (the host before any): who decides the biome (D10) */
   public get lastRewardPicker(): Seat {
-    return this.rewardPickCount === 0 ? "host" : rewardPickerOf(this.rewardPickCount - 1);
+    return this.rewardPickCount === 0 ? "host" : rewardPickerOf(this.rewardPickCount - 1, this.rewardPriority);
   }
 
   /**
@@ -331,6 +344,7 @@ export class CoopSession {
       accountIds: { ...this.accountIds },
       owners: owners.toJSON(),
       rewardPickCount: this.rewardPickCount,
+      rewardPriority: this.rewardPriority,
       trades: this.trades,
       accounts: this.accountSnapshot,
       events: [...this.events],
@@ -349,6 +363,9 @@ export class CoopSession {
     this.snapshot = saved.accounts;
     this.ownership.load(saved.owners);
     this.rewardPickCount = saved.rewardPickCount;
+    // Old saves predate this setting and MUST keep their alternating
+    // picker rule when rejoined, rather than silently changing ownership.
+    this.rewardPriority = saved.rewardPriority ?? "alternate";
     this.trades = saved.trades;
     this.events = saved.events ?? [];
     this.trainers = saved.trainers ?? [];

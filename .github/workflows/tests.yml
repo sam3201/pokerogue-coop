@@ -77,12 +77,9 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
-        with:
-          sparse-checkout: |
-            .github/actions/setup-deps/action.yml
-            test/setup
-            test/reporters/custom-default-reporter.ts
-            patches
+        # Merge-reports loads Vite config and project plugins; sparse checkout
+        # omitted required sources and failed after all five shards passed.
+        # Full checkout here keeps report aggregation deterministic.
 
       - uses: ./.github/actions/setup-deps
 

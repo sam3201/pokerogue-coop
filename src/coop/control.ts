@@ -8,7 +8,7 @@ import { globalScene } from "#app/global-scene";
 import { getPokemonNameWithAffix } from "#app/messages";
 import { STARTERS_PER_SEAT } from "#coop/ownership";
 import { otherSeat, type Seat } from "#coop/protocol";
-import { getCoopSession, requireCoopSession, rewardPickerOf } from "#coop/session";
+import { getCoopSession, requireCoopSession } from "#coop/session";
 import { coopText } from "#coop/text";
 import type { PlayerPokemon, Pokemon } from "#field/pokemon";
 import i18next from "i18next";
@@ -115,7 +115,8 @@ export type SwitchReason = "voluntary" | "faint" | "forced";
 /**
  * Who may be sent into a slot (D7):
  * - voluntary: the controller's own bench only
- * - faint, forced: the owner's bench of the Pokémon that left the slot; if it is empty, the partner's bench
+ * - faint: only the fainted Pokémon owner's bench; zero remaining owned Pokémon ends the co-op run
+ * - forced: the owner's bench first, then the partner's bench only if no own replacement is available
  *
  * An empty result means upstream behaviour: with no bench at all nothing is asked, and the field re-centres or the run
  * ends.
@@ -133,7 +134,13 @@ export function switchTargets(fieldIndex: number, reason: SwitchReason): PlayerP
   }
   const owner = requireOwnerOf(fainted);
   const own = bench.filter(pokemon => requireOwnerOf(pokemon) === owner);
-  return own.length > 0 ? own : bench.filter(pokemon => requireOwnerOf(pokemon) === otherSeat(owner));
+  // Faint replacement is owned-team-only. Once that owner has no legal
+  // Pokémon, the owner-elimination rule ends the run, not a partner loan.
+  return reason === "faint"
+    ? own
+    : own.length > 0
+      ? own
+      : bench.filter(pokemon => requireOwnerOf(pokemon) === otherSeat(owner));
 }
 
 /** @returns Whether sending out the party member at `partyIndex` into the slot is allowed */
@@ -191,7 +198,7 @@ export function deciderOf(decision: CoopDecision): Seat | "either" | null {
       if (session.rewardPickCount === 0) {
         throw new Error("No reward screen has started");
       }
-      return rewardPickerOf(session.rewardPickCount - 1);
+      return session.lastRewardPicker;
     case "SHOP_BUY":
       return "either";
     case "LEARN_MOVE":

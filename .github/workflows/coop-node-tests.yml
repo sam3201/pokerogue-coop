@@ -1,0 +1,54 @@
+name: Co-op Node Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - beta
+      - coop
+      - 'review/**'
+    paths:
+      - 'src/coop/**'
+      - 'coop-server/**'
+      - 'test/coop/**'
+      - 'scripts/verify-sam-guest-evidence.mjs'
+      - 'vitest.coop.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/coop-node-tests.yml'
+  push:
+    branches:
+      - main
+      - beta
+      - coop
+    paths:
+      - 'src/coop/**'
+      - 'coop-server/**'
+      - 'test/coop/**'
+      - 'scripts/verify-sam-guest-evidence.mjs'
+      - 'vitest.coop.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/coop-node-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coop-node-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-coop-protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        uses: ./.github/actions/setup-deps
+      - name: Run co-op Node tests including SAM policy evidence verifier
+        run: pnpm test:coop:node

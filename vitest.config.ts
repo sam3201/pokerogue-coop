@@ -22,7 +22,8 @@ export default defineConfig(async config => {
       passWithNoTests: false,
       reporters: [] as (string | CustomDefaultReporter)[],
       env: { TZ: "UTC" },
-      isolate: false,
+      // QA-only diagnostic: isolate each file to detect cross-suite shared-state effects.
+      isolate: true,
       testTimeout: TEST_TIMEOUT,
       slowTestThreshold: TEST_TIMEOUT / 2,
       // TODO: Vitest's current framework produces spurious errors for type tests with this option enabled.

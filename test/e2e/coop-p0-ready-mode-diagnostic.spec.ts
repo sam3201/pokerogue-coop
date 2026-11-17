@@ -87,6 +87,60 @@ async function observe(page: Page, step: string, started: number): Promise<Snaps
   }, { step, sinceStartMs: Date.now() - started });
 }
 
+/** Record only control flow (not saved content, session identifiers or payloads).
+ * This is a source-identical QA interception; original functions run unchanged.
+ */
+async function installInputTrace(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const runtimeUrl: string = "/src/globals/global-scene.ts";
+    const { globalScene } = await import(/* @vite-ignore */ runtimeUrl);
+    const gameUi = globalScene.ui as any;
+    const starter = (gameUi.handlers as any[]).find(h => h?.constructor?.name === "StarterSelectUiHandler");
+    const events: Array<Record<string, unknown>> = [];
+    const snapshot = () => ({
+      mode: (window as any).__coop?.ui ?? null,
+      handler: gameUi.getHandler?.()?.constructor?.name ?? null,
+      party: starter?.partyStarterIds?.length ?? null,
+      inputBlocked: starter?.blockInput === true,
+      optionVisible: gameUi.handlers?.some((h: any) =>
+        h?.constructor?.name === "OptionSelectUiHandler" && h?.optionSelectContainer?.visible === true) === true,
+    });
+    const addEvent = (what: string, details: Record<string, unknown> = {}) => {
+      if (events.length >= 250) return;
+      events.push({ ms: Math.round(performance.now()), what, ...snapshot(), ...details });
+    };
+    (window as any).__qaPhysicalReadyEvents = events;
+    // Capture physical and mapped events without dispatching any.
+    window.addEventListener("keydown", event => {
+      if (["Enter", "z", "ArrowRight"].includes(event.key)) addEvent("dom-keydown", { key: event.key });
+    }, { capture: true });
+    globalScene.game?.events?.on("input_down", (event: any) => {
+      addEvent("mapped-input", { button: event?.button ?? null, source: event?.controller_type ?? null });
+    });
+    const intercept = (owner: any, key: string) => {
+      if (typeof owner?.[key] !== "function") return;
+      const original = owner[key];
+      owner[key] = function (...args: any[]) {
+        addEvent(key + ":before", key === "processInput" ? { button: args[0] } : {});
+        const result = original.apply(this, args);
+        addEvent(key + ":after", key === "processInput" ? { returned: result } : {});
+        return result;
+      };
+    };
+    intercept(gameUi, "processInput");
+    intercept(gameUi, "setModeInternal");
+    for (const method of ["openPokemonMenu", "addToParty", "popPartyStarter", "tryStart", "processInput"]) {
+      intercept(starter, method);
+    }
+    const option = (gameUi.handlers as any[]).find(h => h?.constructor?.name === "OptionSelectUiHandler");
+    intercept(option, "processInput");
+    addEvent("trace-start");
+  });
+}
+async function readInputTrace(page: Page): Promise<Record<string, unknown>[]> {
+  return page.evaluate(() => (window as any).__qaPhysicalReadyEvents ?? []);
+}
+
 test("P0: physical guest Ready must not activate a stale Pokémon options menu", async ({ browser }) => {
   test.setTimeout(300_000);
   const hostContext = await newClientContext(browser, true);
@@ -95,6 +149,7 @@ test("P0: physical guest Ready must not activate a stale Pokémon options menu",
   const started = Date.now();
   let pass = false;
   let problem: string | null = null;
+  let inputTrace: Record<string, unknown>[] = [];
   let host: Awaited<ReturnType<typeof openClient>> | undefined;
   let guest: Awaited<ReturnType<typeof openClient>> | undefined;
   const record = async (step: string) => {
@@ -108,6 +163,7 @@ test("P0: physical guest Ready must not activate a stale Pokémon options menu",
     await Promise.all([waitForTitle(host), waitForTitle(guest)]);
     await linkClients(host, guest);
     await expect.poll(() => ui(guest!), { timeout: 60_000 }).toBe("STARTER_SELECT");
+    await installInputTrace(guest.page);
     const readyHost = pickAndReady(host, 0);
     const readyGuest = (async () => {
       await record("initial-starter");
@@ -158,6 +214,7 @@ test("P0: physical guest Ready must not activate a stale Pokémon options menu",
     problem = String(e).slice(0, 500);
     throw e;
   } finally {
+    try { if (guest) inputTrace = await readInputTrace(guest.page); } catch { /* crashed browser */ }
     // Always export only structural handler metadata, no codes/cookies/pixels.
     await mkdir("test-results/acceptance", { recursive: true });
     await writeFile("test-results/acceptance/p0-ready-mode-diagnostic.json",
@@ -165,7 +222,7 @@ test("P0: physical guest Ready must not activate a stale Pokémon options menu",
         schema: "sam.coop.qa.physical_ready_mode_observation.v1",
         sourceSha: process.env.GITHUB_SHA ?? null,
         runId: process.env.GITHUB_RUN_ID ?? null,
-        pass, problem, samples,
+        pass, problem, samples, inputTrace,
       }, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
     await Promise.allSettled([hostContext.close(), guestContext.close()]);
   }
